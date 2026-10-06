@@ -1,0 +1,17 @@
+{
+  "name": "@espalier/keeper",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-strip-types src/main.ts",
+    "test": "node --experimental-strip-types --test \"test/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@espalier/sdk": "file:../packages/sdk",
+    "@supabase/supabase-js": "^2.117.2",
+    "viem": "^2"
+  },
+  "devDependencies": { "@types/node": "^22.0.0", "typescript": "~5.9.0" }
+}

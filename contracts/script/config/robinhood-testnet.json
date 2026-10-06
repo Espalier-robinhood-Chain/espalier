@@ -1,0 +1,130 @@
+{
+  "_note": "TEMPLATE. Semua alamat 0x0 sengaja kosong: skrip menolak sampai diisi dari sumber resmi (Fase 0 item 7) dan addressesVerified diubah true. Komposisi MAG7 dan nilai staleness adalah placeholder, bukan keputusan (pertanyaan terbuka 2 dan Fase 0 item 5).",
+  "name": "robinhood-testnet",
+  "chainId": 46630,
+  "mocks": false,
+  "addressesVerified": false,
+  "admin": {
+    "_note": "owner = multisig/EOA yang menerima ADMIN. timelockDelaySeconds 0 = tanpa timelock (owner langsung ADMIN, hanya untuk testnet); > 0 = TimelockController dengan owner sebagai proposer dan executor, dan timelock menjadi ADMIN (desain produksi: 172800 = 48 jam). guardian/keeper boleh 0x0 (peran tidak diberikan).",
+    "owner": "0x0000000000000000000000000000000000000000",
+    "timelockDelaySeconds": 0,
+    "guardian": "0x0000000000000000000000000000000000000000",
+    "keeper": "0x0000000000000000000000000000000000000000"
+  },
+  "sequencer": {
+    "_note": "feed = Chainlink L2 Sequencer Uptime Feed Robinhood Chain (belum diverifikasi). Kosong hanya boleh bila allowDisabled=true (pemeriksaan sequencer mati).",
+    "feed": "0x0000000000000000000000000000000000000000",
+    "gracePeriodSeconds": 3600,
+    "allowDisabled": false
+  },
+  "settlement": {
+    "_note": "maxPrintDelaySeconds adalah placeholder (usulan, pertanyaan terbuka 9). Batas kontrak 86400.",
+    "maxPrintDelaySeconds": 7200
+  },
+  "cordon": {
+    "name": "Espalier Cordon MAG7",
+    "symbol": "cMAG7"
+  },
+  "fees": {
+    "_note": "Semua 0 sampai besaran diputuskan (pertanyaan terbuka 12). Batas hardcode kontrak: 100/100/200 bps. recipient wajib bila ada fee > 0.",
+    "mintBps": 0,
+    "redeemBps": 0,
+    "managementBps": 0,
+    "recipient": "0x0000000000000000000000000000000000000000"
+  },
+  "seed": {
+    "_note": "Seed hanya murah SEBELUM serah-terima ADMIN (deployer harus memegang token). amounts = string jumlah mentah per aset, urutan sama dengan assets. shares minimal 1e18.",
+    "enabled": false,
+    "to": "0x0000000000000000000000000000000000000000",
+    "shares": "0",
+    "amounts": []
+  },
+  "holidays": [
+    20261126,
+    20261225
+  ],
+  "spur": {
+    "_note": "Spur Vault (covered call mingguan). enabled=false = tidak di-deploy. Bila true: assetSymbol harus salah satu simbol di `assets`, premiumToken = alamat USDG di chain target (wajib diverifikasi dari sumber resmi), admin.keeper wajib diisi, depositCap \"0\" = tanpa batas (JANGAN dipakai di peluncuran publik). Picker pertama = alamat uji milik tim.",
+    "enabled": false,
+    "assetSymbol": "NVDA",
+    "premiumToken": "0x0000000000000000000000000000000000000000",
+    "fillWindowSeconds": 21600,
+    "minDeposit": "1000000000000",
+    "depositCap": "0",
+    "otmBps": 1000,
+    "minPremiumBps": 0,
+    "pickers": []
+  },
+  "assets": [
+    {
+      "symbol": "AAPL",
+      "token": "0x0000000000000000000000000000000000000000",
+      "feed": "0x0000000000000000000000000000000000000000",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": true,
+      "targetBps": 1429
+    },
+    {
+      "symbol": "MSFT",
+      "token": "0x0000000000000000000000000000000000000000",
+      "feed": "0x0000000000000000000000000000000000000000",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": true,
+      "targetBps": 1429
+    },
+    {
+      "symbol": "GOOGL",
+      "token": "0x0000000000000000000000000000000000000000",
+      "feed": "0x0000000000000000000000000000000000000000",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": true,
+      "targetBps": 1429
+    },
+    {
+      "symbol": "AMZN",
+      "token": "0x0000000000000000000000000000000000000000",
+      "feed": "0x0000000000000000000000000000000000000000",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": true,
+      "targetBps": 1429
+    },
+    {
+      "symbol": "NVDA",
+      "token": "0x0000000000000000000000000000000000000000",
+      "feed": "0x0000000000000000000000000000000000000000",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": true,
+      "targetBps": 1429
+    },
+    {
+      "symbol": "META",
+      "token": "0x0000000000000000000000000000000000000000",
+      "feed": "0x0000000000000000000000000000000000000000",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": true,
+      "targetBps": 1429
+    },
+    {
+      "symbol": "TSLA",
+      "token": "0x0000000000000000000000000000000000000000",
+      "feed": "0x0000000000000000000000000000000000000000",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": true,
+      "targetBps": 1426
+    }
+  ]
+}
