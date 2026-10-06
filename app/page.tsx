@@ -111,10 +111,10 @@ export default function Landing() {
             <h2 id="manifesto-title">Manifesto</h2>
           </div>
           <blockquote className="max-w-[34em] space-y-5 font-display text-[clamp(1.3rem,2.4vw,1.85rem)] leading-[1.42] font-light">
-            <p>For centuries, gardeners along the walls of Europe learned a quiet secret.<br />A wild tree grows everywhere and bears little.<br />A trained tree grows with intention — and bears fruit, season after season.</p>
+            <p>For centuries, gardeners along the walls of Europe learned a quiet secret.<br />A wild tree grows everywhere and bears little.<br />A trained tree grows with intention and bears fruit, season after season.</p>
             <p>They called it <em>espalier</em>.</p>
             <p>Markets are wild trees. Espalier is the wall, the wire, and the patience.<br />We plant the world’s great companies into disciplined baskets.<br />We prune them on schedule. We harvest yield every week.</p>
-            <p>No noise. No gambling. Just a well-kept garden.</p>
+            <p>No noise. No gambling. Just a well kept garden.</p>
             <p className="text-[clamp(1.5rem,2.8vw,2.2rem)] font-medium tracking-[-.015em]">Plant stocks. Train them. Harvest weekly.</p>
           </blockquote>
         </section>
