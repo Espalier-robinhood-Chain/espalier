@@ -6,3 +6,5 @@ slither.db.json
 # Hasil rehearsal/mock tidak dikomit; deployments/robinhood-testnet.json (hasil nyata) dikomit.
 deployments/*mock*.json
 deployments/anvil-*.json
+
+lib/
