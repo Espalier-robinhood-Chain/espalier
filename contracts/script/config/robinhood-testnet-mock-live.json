@@ -1,0 +1,161 @@
+{
+  "_note": "MOCK di testnet sungguhan (46630). Token ERC-20 dan feed palsu dibuat oleh skrip (alamat di assets diabaikan). Semua peran memakai alamat milik tim; tidak ada akun anvil. Picker sementara = owner.",
+  "name": "robinhood-testnet-mock-live",
+  "chainId": 46630,
+  "mocks": true,
+  "addressesVerified": false,
+  "admin": {
+    "_note": "timelockDelaySeconds 0 = tanpa timelock (owner langsung ADMIN, hanya untuk testnet).",
+    "owner": "0xE0bf53F10B12bcd19A979C698809750f34512f47",
+    "timelockDelaySeconds": 0,
+    "guardian": "0x105a6Abd39e6b135A7eE4d46E92eA6B54152DADB",
+    "keeper": "0x9c8C86427e71248b6E451D10F12E883fA4C236d9"
+  },
+  "sequencer": {
+    "_note": "feed = Chainlink L2 Sequencer Uptime Feed Robinhood Chain (belum diverifikasi). Kosong hanya boleh bila allowDisabled=true (pemeriksaan sequencer mati).",
+    "feed": "0x0000000000000000000000000000000000000000",
+    "gracePeriodSeconds": 3600,
+    "allowDisabled": false
+  },
+  "settlement": {
+    "_note": "maxPrintDelaySeconds adalah placeholder (usulan, pertanyaan terbuka 9). Batas kontrak 86400.",
+    "maxPrintDelaySeconds": 7200
+  },
+  "cordon": {
+    "name": "Espalier Cordon MAG7",
+    "symbol": "cMAG7"
+  },
+  "fees": {
+    "_note": "Fee uji untuk rehearsal (10/10/50 bps) agar jalur fee ikut teruji. Batas hardcode kontrak: 100/100/200 bps.",
+    "mintBps": 10,
+    "redeemBps": 10,
+    "managementBps": 50,
+    "recipient": "0xE0bf53F10B12bcd19A979C698809750f34512f47"
+  },
+  "seed": {
+    "_note": "Seed hanya murah SEBELUM serah-terima ADMIN (deployer harus memegang token). amounts = string jumlah mentah per aset, urutan sama dengan assets. shares minimal 1e18.",
+    "enabled": true,
+    "to": "0xE0bf53F10B12bcd19A979C698809750f34512f47",
+    "shares": "1000000000000000000000",
+    "amounts": [
+      "10000000000000000000",
+      "10000000000000000000",
+      "10000000000000000000",
+      "10000000000000000000",
+      "10000000000000000000",
+      "10000000000000000000",
+      "10000000000000000000"
+    ]
+  },
+  "holidays": [
+    20261126,
+    20261225
+  ],
+  "spur": {
+    "_note": "Spur Vault mock. Picker sementara = owner (menerima 1.000.000 USDG mock). Ganti picker lewat ADMIN bila perlu.",
+    "enabled": true,
+    "assetSymbol": "NVDA",
+    "premiumToken": "0x0000000000000000000000000000000000000000",
+    "fillWindowSeconds": 21600,
+    "minDeposit": "1000000000000",
+    "depositCap": "0",
+    "otmBps": 1000,
+    "minPremiumBps": 0,
+    "pickers": [
+      "0xE0bf53F10B12bcd19A979C698809750f34512f47"
+    ]
+  },
+  "graft": {
+    "_note": "Graft Vault mock. Picker sementara = owner.",
+    "enabled": true,
+    "assetSymbol": "NVDA",
+    "premiumToken": "0x0000000000000000000000000000000000000000",
+    "fillWindowSeconds": 21600,
+    "minDeposit": "10000000",
+    "depositCap": "0",
+    "otmBps": 1000,
+    "minPremiumBps": 0,
+    "pickers": [
+      "0xE0bf53F10B12bcd19A979C698809750f34512f47"
+    ]
+  },
+  "assets": [
+    {
+      "symbol": "AAPL",
+      "token": "0x0000000000000000000000000000000000000000",
+      "feed": "0x0000000000000000000000000000000000000000",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": false,
+      "targetBps": 1429,
+      "mockPriceE8": 25000000000
+    },
+    {
+      "symbol": "MSFT",
+      "token": "0x0000000000000000000000000000000000000000",
+      "feed": "0x0000000000000000000000000000000000000000",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": false,
+      "targetBps": 1429,
+      "mockPriceE8": 45000000000
+    },
+    {
+      "symbol": "GOOGL",
+      "token": "0x0000000000000000000000000000000000000000",
+      "feed": "0x0000000000000000000000000000000000000000",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": false,
+      "targetBps": 1429,
+      "mockPriceE8": 18000000000
+    },
+    {
+      "symbol": "AMZN",
+      "token": "0x0000000000000000000000000000000000000000",
+      "feed": "0x0000000000000000000000000000000000000000",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": false,
+      "targetBps": 1429,
+      "mockPriceE8": 22000000000
+    },
+    {
+      "symbol": "NVDA",
+      "token": "0x0000000000000000000000000000000000000000",
+      "feed": "0x0000000000000000000000000000000000000000",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": false,
+      "targetBps": 1429,
+      "mockPriceE8": 14000000000
+    },
+    {
+      "symbol": "META",
+      "token": "0x0000000000000000000000000000000000000000",
+      "feed": "0x0000000000000000000000000000000000000000",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": false,
+      "targetBps": 1429,
+      "mockPriceE8": 65000000000
+    },
+    {
+      "symbol": "TSLA",
+      "token": "0x0000000000000000000000000000000000000000",
+      "feed": "0x0000000000000000000000000000000000000000",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": false,
+      "targetBps": 1426,
+      "mockPriceE8": 30000000000
+    }
+  ]
+}
