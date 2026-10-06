@@ -74,7 +74,7 @@ Belum diuji di jaringan: kode ini ditulis tanpa `npm install` (registry diblokir
 
 ## Panel deposit/withdraw Spur sungguhan (tahap 8)
 
-`components/spur-live.tsx` memanggil `SpurVault` lewat wagmi dan `@espalier/sdk` (`packages/sdk/src/spur.ts`: `readSpurInfo`, `readSpurAccount`, `decodeSpurError`, `spurWriteAbi`). `DepositWithdrawPanel` memilihnya hanya bila `asset="stock"` (Spur), `NEXT_MODE` dan `NEXT_PUBLIC_REOWN_PROJECT_ID` terisi, `NEXT_PUBLIC_SPUR_VAULT_ADDRESS` terisi, `NEXT_PUBLIC_SPUR_VAULT_SYMBOL` (default `sNVDA`) sama dengan simbol di URL, dan chain vault sama dengan `NEXT_MODE`. Selain itu panel tetap simulasi. **Graft tetap simulasi** di web: kontrak `GraftVault` sudah ada (`contracts/src/GraftVault.sol`), tetapi SDK/keeper/indexer/panel web untuk Graft belum.
+`components/spur-live.tsx` memanggil `SpurVault` lewat wagmi dan `@espalier/sdk` (`packages/sdk/src/spur.ts`: `readSpurInfo`, `readSpurAccount`, `decodeSpurError`, `spurWriteAbi`). `DepositWithdrawPanel` memilihnya hanya bila `asset="stock"` (Spur), `NEXT_MODE` dan `NEXT_PUBLIC_REOWN_PROJECT_ID` terisi, `NEXT_PUBLIC_SPUR_VAULT_ADDRESS` terisi, `NEXT_PUBLIC_SPUR_VAULT_SYMBOL` (default `sNVDA`) sama dengan simbol di URL, dan chain vault sama dengan `NEXT_MODE`. Selain itu panel tetap simulasi. **Graft** punya env sendiri (lihat bagian "Graft Vault" di bawah).
 
 - **Deposit**: approve sebesar jumlah (bukan tak terbatas), lalu `deposit`. Setoran masuk antrean dan baru menjadi share saat roll berikutnya; sebelum itu bisa dibatalkan penuh (`cancelDeposit`).
 - **Withdraw**: pengguna mengetik jumlah Stock Token, kontrak meminta *share*. Konversi dibulatkan ke bawah (`planWithdraw`), dan jumlah yang sama dengan nilai seluruh share bebas berarti tarik semua. Penarikan diantrikan, dihargai saat roll berikutnya (setelah opsi round ini settle), lalu diambil lewat `claimWithdraw`. Selama antre, share tetap menanggung risiko dan tetap berhak atas premium round yang berjalan.
@@ -92,3 +92,12 @@ Belum diuji di jaringan: kode ini ditulis tanpa `npm install` (registry diblokir
 
 ## Keeper pruning (tahap 4, off-chain saja)
 `keeper/` = perencana dan siklus keeper, mode dry-run saja (kontrak belum punya `prune`). Detail dan daftar sisa pekerjaan: `keeper/README.md`.
+
+## Graft Vault (cash-secured put) ikut berjalan
+
+`GraftVault` mencerminkan `SpurVault` (event, round, antrean, ABI tulis sama), jadi Graft memakai jalur kode yang sama dengan Spur di web, indexer, dan keeper. Bedanya: aset vault = USDG (collateral + premium), harga acuan = `UNDERLYING`, dan `notional` dalam jumlah Stock Token.
+
+- **Web**: isi `NEXT_PUBLIC_GRAFT_VAULT_ADDRESS` (field `graftVault` di `contracts/deployments/<nama>.json`), `NEXT_PUBLIC_GRAFT_VAULT_CHAIN_ID` (46630) dan `NEXT_PUBLIC_GRAFT_VAULT_SYMBOL` (default `gNVDA`), bersama `NEXT_MODE`, `NEXT_PUBLIC_REOWN_PROJECT_ID`, `NEXT_PUBLIC_RH_RPC_TESTNET`. Restart/build ulang karena nilainya di-inline. Panel `LiveDepositWithdrawPanel kind="graft"` (`components/spur-live.tsx`) melakukan deposit/withdraw/klaim dalam USDG. Kartu `/vaults` dan halaman `/vaults/<simbol>` tetap bisa dibuka walau indexer belum membuat baris di Supabase.
+- **Indexer**: `GRAFT_VAULT_ADDRESS`, `GRAFT_START_BLOCK` (blok deploy), `GRAFT_VAULT_SYMBOL`. Menulis `vaults.kind='graft'`, underlying dari `UNDERLYING`, notional memakai desimal Stock Token.
+- **Keeper**: `GRAFT_VAULT_ADDRESS`, `GRAFT_MODE` (default `dry-run`). Akun keeper wajib punya `KEEPER_ROLE` di GraftVault dan HarvestAuction. Harga settlement diambil untuk `UNDERLYING`, bukan USDG.
+- Sisa: `/wall` belum menilai posisi Graft (sama seperti Spur: cost basis belum diisi indexer).

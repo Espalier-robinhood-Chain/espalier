@@ -20,7 +20,11 @@ const isRevert = (e: unknown) => e instanceof BaseError && e.walk((x) => x insta
 
 export interface SpurRuntime { chain: SpurChain; executor: SpurExecutor; account: Address }
 
-export async function createSpurRuntime(o: { rpcUrl: string; chainId: number; vault: Address; mode: "dry-run" | "live"; keeperAddress?: Address; privateKey?: Hex }): Promise<SpurRuntime> {
+/**
+ * `kind` "graft": GraftVault mencerminkan SpurVault (fungsi keeper, lelang, dan settlement sama). Bedanya hanya token acuan harga:
+ * Spur memakai ASSET (Stock Token yang disimpan vault), Graft memakai UNDERLYING (aset Graft = USDG, bukan acuan harga).
+ */
+export async function createSpurRuntime(o: { rpcUrl: string; chainId: number; vault: Address; mode: "dry-run" | "live"; keeperAddress?: Address; privateKey?: Hex; kind?: "spur" | "graft" }): Promise<SpurRuntime> {
   const transport = http(o.rpcUrl, { retryCount: 3 });
   const client = createPublicClient({ transport }) as PublicClient;
   const actual = await client.getChainId();
@@ -34,6 +38,9 @@ export async function createSpurRuntime(o: { rpcUrl: string; chainId: number; va
     client.readContract({ ...v, functionName: "FILL_WINDOW" }), client.readContract({ ...v, functionName: "MIN_DURATION" }),
     client.readContract({ ...v, functionName: "MAX_DURATION" }),
   ]);
+  // Token yang harganya dipakai untuk strike/settlement. Semua pemakaian di bawah (settlement, feed, settle) lewat `priceToken`.
+  const priceToken: Address = o.kind === "graft" ? await client.readContract({ ...v, functionName: "UNDERLYING" }) : asset;
+  const label = o.kind === "graft" ? "GraftVault" : "SpurVault";
   const a = { address: auction, abi: harvestAuctionAbi } as const;
   const s = { address: settlement, abi: settlementOracleAbi } as const;
 
@@ -45,7 +52,7 @@ export async function createSpurRuntime(o: { rpcUrl: string; chainId: number; va
     client.readContract({ ...v, functionName: "hasRole", args: [KEEPER_ROLE, account.address] }),
     client.readContract({ ...a, functionName: "hasRole", args: [KEEPER_ROLE, account.address] }),
   ]);
-  if (!onVault) throw new Error(`${account.address} tidak punya KEEPER_ROLE di SpurVault ${vault} (rollRound akan ditolak)`);
+  if (!onVault) throw new Error(`${account.address} tidak punya KEEPER_ROLE di ${label} ${vault} (rollRound akan ditolak)`);
   if (!onAuction) throw new Error(`${account.address} tidak punya KEEPER_ROLE di HarvestAuction ${auction} (fill akan ditolak)`);
 
   let maxPrintDelay: bigint | undefined;
@@ -61,7 +68,7 @@ export async function createSpurRuntime(o: { rpcUrl: string; chainId: number; va
       const current = round === 0n ? null : await client.readContract({ ...v, functionName: "getRound", args: [round], blockNumber });
       let settlementRecorded = false;
       if (active && current && current.picker !== ZERO && block.timestamp >= current.expiry) {
-        settlementRecorded = (await client.readContract({ ...s, functionName: "settlement", args: [asset, current.expiry], blockNumber })).exists;
+        settlementRecorded = (await client.readContract({ ...s, functionName: "settlement", args: [priceToken, current.expiry], blockNumber })).exists;
       }
       return {
         now: block.timestamp, paused, active, round, fillWindow: BigInt(fillWindow), minDuration: BigInt(minDuration), maxDuration: BigInt(maxDuration), settlementRecorded,
@@ -74,8 +81,8 @@ export async function createSpurRuntime(o: { rpcUrl: string; chainId: number; va
     },
     isPicker: (p) => client.readContract({ ...a, functionName: "isPicker", args: [getAddress(p)] }),
     async settlementContext() {
-      const [feed] = await client.readContract({ address: router, abi: routerFeedAbi, functionName: "feedOf", args: [asset] });
-      if (feed === ZERO) throw new Error("router tidak punya feed untuk aset Spur");
+      const [feed] = await client.readContract({ address: router, abi: routerFeedAbi, functionName: "feedOf", args: [priceToken] });
+      if (feed === ZERO) throw new Error(`router tidak punya feed untuk token acuan ${label}`);
       maxPrintDelay ??= BigInt(await client.readContract({ ...s, functionName: "MAX_PRINT_DELAY" }));
       const reader: FeedReader = {
         async latest() { const [id, , , updatedAt] = await client.readContract({ address: feed, abi: aggregatorAbi, functionName: "latestRoundData" }); return { id, updatedAt }; },
@@ -101,7 +108,7 @@ export async function createSpurRuntime(o: { rpcUrl: string; chainId: number; va
       case "settleFallback": {
         const round = await client.readContract({ ...v, functionName: "round" });
         const r = await client.readContract({ ...v, functionName: "getRound", args: [round] });
-        return { address: settlement, abi: settlementOracleAbi, functionName: c.fn, args: [asset, r.expiry, c.roundId] } as const;
+        return { address: settlement, abi: settlementOracleAbi, functionName: c.fn, args: [priceToken, r.expiry, c.roundId] } as const;
       }
     }
   };

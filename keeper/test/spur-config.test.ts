@@ -24,3 +24,16 @@ test("config: live butuh kunci; dry-run butuh alamat; nilai salah ditolak, bukan
 test("config: KEEPER_MODE untuk pruning Cordon tetap hanya dry-run", () => {
   assert.throws(() => loadConfig({ ...base, KEEPER_MODE: "live" }), /belum didukung/);
 });
+
+test("config: Graft opsional, env sendiri (GRAFT_*), tidak mengubah Spur", () => {
+  const c0 = loadConfig({ ...base, SPUR_VAULT_ADDRESS: V, KEEPER_ADDRESS: ADDR });
+  assert.equal(c0.graft, null);
+  const c = loadConfig({ ...base, SPUR_VAULT_ADDRESS: V, GRAFT_VAULT_ADDRESS: "0x" + "dd".repeat(20), KEEPER_ADDRESS: ADDR });
+  assert.equal(c.graft!.vault, "0x" + "dd".repeat(20)); assert.equal(c.graft!.mode, "dry-run"); assert.equal(c.spur!.vault, V);
+  // Graft saja, tanpa Spur, juga sah.
+  assert.equal(loadConfig({ ...base, GRAFT_VAULT_ADDRESS: V, KEEPER_ADDRESS: ADDR }).spur, null);
+  assert.throws(() => loadConfig({ ...base, GRAFT_VAULT_ADDRESS: "0x123", KEEPER_ADDRESS: ADDR }), /GRAFT_VAULT_ADDRESS/);
+  assert.throws(() => loadConfig({ ...base, GRAFT_VAULT_ADDRESS: V, GRAFT_MODE: "live", KEEPER_ADDRESS: ADDR }), /GRAFT_MODE=live butuh KEEPER_PRIVATE_KEY/);
+  assert.throws(() => loadConfig({ ...base, GRAFT_VAULT_ADDRESS: V, GRAFT_MODE: "yolo", KEEPER_ADDRESS: ADDR }), /GRAFT_MODE/);
+  assert.throws(() => loadConfig({ ...base, GRAFT_VAULT_ADDRESS: V }), /KEEPER_ADDRESS/);
+});

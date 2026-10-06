@@ -1,6 +1,6 @@
 "use client";
 import { useId, useState } from "react";
-import { spurLive, tradeLive } from "@/lib/web3/env";
+import { graftLive, spurLive, tradeLive } from "@/lib/web3/env";
 import { AmountField, Radio, Segmented, note } from "./trade-fields";
 import { LiveDepositWithdrawPanel } from "./spur-live";
 import { LiveMintRedeemPanel } from "./trade-live";
@@ -53,10 +53,12 @@ function DemoDepositWithdrawPanel({ symbol, asset, unit }: { symbol: string; ass
   );
 }
 
-// Sungguhan hanya untuk Spur (asset "stock") bila wallet aktif dan SpurVault untuk `symbol` dikonfigurasi
-// (NEXT_PUBLIC_SPUR_VAULT_*). Graft (asset "USDG") belum punya kontrak, jadi selalu simulasi.
+// Sungguhan bila wallet aktif dan vault untuk `symbol` dikonfigurasi: Spur (asset "stock") lewat NEXT_PUBLIC_SPUR_VAULT_*,
+// Graft (asset "USDG") lewat NEXT_PUBLIC_GRAFT_VAULT_*. Selain itu simulasi (tanpa transaksi).
 export function DepositWithdrawPanel(p: { symbol: string; asset: "stock" | "USDG"; unit?: string }) {
-  return p.asset === "stock" && spurLive(p.symbol) ? <LiveDepositWithdrawPanel symbol={p.symbol} unit={p.unit} /> : <DemoDepositWithdrawPanel {...p} />;
+  if (p.asset === "stock" && spurLive(p.symbol)) return <LiveDepositWithdrawPanel kind="spur" symbol={p.symbol} unit={p.unit} />;
+  if (p.asset === "USDG" && graftLive(p.symbol)) return <LiveDepositWithdrawPanel kind="graft" symbol={p.symbol} unit={p.unit} />;
+  return <DemoDepositWithdrawPanel {...p} />;
 }
 
 // Sungguhan bila wallet aktif dan vault untuk `symbol` dikonfigurasi (NEXT_PUBLIC_CORDON_VAULT_*); selain itu simulasi seperti sebelumnya.

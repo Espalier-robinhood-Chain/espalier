@@ -7,6 +7,7 @@ import { VaultCard } from "@/components/product";
 import { ButtonLink, EmptyState } from "@/components/ui";
 import { ConfigError } from "@/lib/api/http";
 import { listVaults } from "@/lib/api/queries";
+import { graftLive, spurLive, web3Env } from "@/lib/web3/env";
 
 // Round dan APY berubah tiap minggu: jangan dibekukan saat build.
 export const dynamic = "force-dynamic";
@@ -34,8 +35,19 @@ async function load(): Promise<Loaded> {
   }
 }
 
-// Graft Vault di luar MVP (brief §6). Jika belum ada di data, tampil sebagai "belum live": tanpa link, tanpa angka.
+// Graft Vault yang belum ada di data dan belum dikonfigurasi tampil sebagai "belum terhubung": tanpa link, tanpa angka.
 const plannedGraft = { symbol: "gNVDA", text: "Graft Vault. Cash-secured put on NVDA." };
+
+// Vault yang dikonfigurasi live (env + wallet aktif) tetapi belum ada di Supabase (indexer belum jalan): tetap ditampilkan dan
+// bisa dibuka (halaman detail punya jalur yang sama), supaya deposit pertama tidak menunggu indexer.
+function configuredMissing(kind: "spur" | "graft", vaults: Vaults) {
+  const t = kind === "spur" ? web3Env.spur : web3Env.graft;
+  if (!t || !(kind === "spur" ? spurLive(t.symbol) : graftLive(t.symbol))) return null;
+  return vaults.some((v) => v.symbol === t.symbol) ? null : t.symbol;
+}
+const Pending = ({ symbol, kind }: { symbol: string; kind: "spur" | "graft" }) => (
+  <li><VaultCard symbol={symbol} kind={kind} underlying={symbol.slice(1)} apy={null} strike={null} round={null} /></li>
+);
 
 function VaultList({ vaults }: { vaults: Vaults }) {
   return (
@@ -56,9 +68,13 @@ export default async function VaultsPage({ searchParams }: Props) {
   const spurs = data.kind === "ok" ? data.vaults.filter((v) => v.kind === "spur") : [];
   const grafts = data.kind === "ok" ? data.vaults.filter((v) => v.kind === "graft") : [];
   const anyDemo = data.kind === "ok" && data.vaults.some((v) => v.isDemo);
-  const showPlannedGraft = data.kind === "ok" && !grafts.some((g) => g.symbol === plannedGraft.symbol);
+  const loaded = data.kind === "ok" ? data.vaults : [];
+  const pendingSpur = data.kind === "ok" ? configuredMissing("spur", loaded) : null;
+  const pendingGraft = data.kind === "ok" ? configuredMissing("graft", loaded) : null;
+  const showPlannedGraft = data.kind === "ok" && !pendingGraft && !grafts.some((g) => g.symbol === plannedGraft.symbol);
   const shownSpurs = filter === "graft" ? [] : spurs, shownGrafts = filter === "spur" ? [] : grafts;
   const showPlanned = showPlannedGraft && filter !== "spur";
+  const showPendingSpur = pendingSpur !== null && filter !== "graft", showPendingGraft = pendingGraft !== null && filter !== "spur";
 
   return (
     <>
@@ -86,10 +102,12 @@ export default async function VaultsPage({ searchParams }: Props) {
             ))}
           </nav>
 
-          {data.kind === "ok" && (shownSpurs.length > 0 || shownGrafts.length > 0 || showPlanned) && (
+          {data.kind === "ok" && (shownSpurs.length > 0 || shownGrafts.length > 0 || showPlanned || showPendingSpur || showPendingGraft) && (
             <ul className="grid gap-4">
               <VaultList vaults={shownSpurs} />
+              {showPendingSpur && <Pending symbol={pendingSpur} kind="spur" />}
               <VaultList vaults={shownGrafts} />
+              {showPendingGraft && <Pending symbol={pendingGraft} kind="graft" />}
               {showPlanned && (
                 <li className="grid items-center gap-6 rounded-[20px] border border-dashed border-wire px-[26px] py-6 md:grid-cols-[minmax(150px,1.1fr)_2fr_auto]">
                   <div>
@@ -99,21 +117,21 @@ export default async function VaultsPage({ searchParams }: Props) {
                   <dl className="grid grid-cols-[repeat(auto-fit,minmax(110px,1fr))] gap-x-5 gap-y-3 text-[.86rem]">
                     <div><dt className="text-bark">Collateral</dt><dd className="font-medium">USDG</dd></div>
                     <div><dt className="text-bark">Strike</dt><dd className="font-medium">Below today’s price</dd></div>
-                    <div><dt className="text-bark">Status</dt><dd className="font-medium">After MVP</dd></div>
+                    <div><dt className="text-bark">Status</dt><dd className="font-medium">Not connected yet</dd></div>
                   </dl>
                   <span className="w-fit rounded-full border border-wire px-3 py-1 text-xs font-medium text-bark">Not live</span>
                 </li>
               )}
             </ul>
           )}
-          {data.kind === "ok" && filter !== "graft" && spurs.length === 0 && (
-            <div className={shownGrafts.length > 0 || showPlanned ? "mt-6" : ""}>
+          {data.kind === "ok" && filter !== "graft" && spurs.length === 0 && !showPendingSpur && (
+            <div className={shownGrafts.length > 0 || showPlanned || showPendingGraft ? "mt-6" : ""}>
               <EmptyState title="No Spur Vaults planted yet" text="The first vault has not been set. Check back soon.">
                 <ButtonLink href="/docs" variant="ghost" className="mt-2">Read how Spurs work</ButtonLink>
               </EmptyState>
             </div>
           )}
-          {data.kind === "ok" && filter === "graft" && shownGrafts.length === 0 && !showPlanned && (
+          {data.kind === "ok" && filter === "graft" && shownGrafts.length === 0 && !showPlanned && !showPendingGraft && (
             <EmptyState title="No Graft Vaults yet" text="Grafts come after the first Spur Vault has run. Check back later." />
           )}
           {data.kind === "unconfigured" && (

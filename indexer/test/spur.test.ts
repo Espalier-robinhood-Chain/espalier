@@ -67,9 +67,37 @@ test("bootstrapSpur: alamat huruf kecil, simbol default s<aset>, override dihorm
   const { store, s } = fakeStore();
   const b = await bootstrapSpur(fakeChain({ head: 0n }).chain, store, null);
   assert.equal(b.vaultId, "vault-1");
-  assert.deepEqual(s.vault, { address: V, symbol: "sNVDA", underlying: "NVDA" });
+  assert.deepEqual(s.vault, { address: V, symbol: "sNVDA", underlying: "NVDA", kind: "spur" });
   await bootstrapSpur(fakeChain({ head: 0n }).chain, store, "sNVDA2");
   assert.equal((s.vault as { symbol: string }).symbol, "sNVDA2");
+});
+
+test("bootstrapSpur untuk Graft: kind graft, simbol default g<underlying> (bukan g<USDG>), underlying = ticker acuan", async () => {
+  const { store, s } = fakeStore();
+  const graftMeta: SpurMeta = { address: V, assetSymbol: "USDG", assetDecimals: 6, premiumDecimals: 6, shareDecimals: 18, kind: "graft", underlyingSymbol: "NVDA", notionalDecimals: 18 };
+  const chain = { ...fakeChain({ head: 0n }).chain, meta: async () => graftMeta };
+  await bootstrapSpur(chain, store, null);
+  assert.deepEqual(s.vault, { address: V, symbol: "gNVDA", underlying: "NVDA", kind: "graft" });
+  await bootstrapSpur(chain, store, "gNVDA2");
+  assert.equal((s.vault as { symbol: string }).symbol, "gNVDA2");
+});
+
+test("roundRow Graft: notional dibaca dengan desimal Stock Token, bukan desimal USDG (6)", () => {
+  const graftMeta: SpurMeta = { address: V, assetSymbol: "USDG", assetDecimals: 6, premiumDecimals: 6, shareDecimals: 18, kind: "graft", underlyingSymbol: "NVDA", notionalDecimals: 18 };
+  const r = roundRow(roundOf({ notional: 40n * WAD, picker: P, premium: 4_000_000n }), graftMeta, 1, undefined)!;
+  assert.equal(r.notional, "40");
+  assert.equal(r.premium_usdg, "4");
+  // Spur tanpa notionalDecimals tetap memakai desimal aset vault (perilaku lama tidak berubah).
+  assert.equal(roundRow(roundOf({ notional: 40n * WAD }), META, 1, undefined)!.notional, "40");
+});
+
+test("loadConfig: GRAFT_* opsional, divalidasi seperti SPUR_*", () => {
+  const base = { CORDON_VAULT_ADDRESS: V, START_BLOCK: "1", SUPABASE_URL: "http://x", SUPABASE_SERVICE_ROLE_KEY: "k", INDEXER_RPC_URL: "http://r" };
+  assert.equal(loadConfig(base).graft, null);
+  const c = loadConfig({ ...base, GRAFT_VAULT_ADDRESS: A, GRAFT_START_BLOCK: "7", GRAFT_VAULT_SYMBOL: "gNVDA" });
+  assert.deepEqual(c.graft, { vault: A, startBlock: 7n, symbol: "gNVDA" });
+  assert.throws(() => loadConfig({ ...base, GRAFT_VAULT_ADDRESS: "0x123" }), /GRAFT_VAULT_ADDRESS/);
+  assert.throws(() => loadConfig({ ...base, GRAFT_VAULT_ADDRESS: A }), /GRAFT_START_BLOCK/);
 });
 
 test("siklus penuh: round settled, harvest per akun dengan pembulatan kontrak, klaim menandai claimed_at, posisi dari share", async () => {

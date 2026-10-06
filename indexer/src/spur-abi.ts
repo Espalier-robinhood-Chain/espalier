@@ -19,6 +19,7 @@ export const spurVaultAbi = parseAbi([
   ...SPUR_EVENT_SIGNATURES,
   "function ASSET() view returns (address)",
   "function PREMIUM() view returns (address)",
+  "function UNDERLYING() view returns (address)", // hanya ada di GraftVault; dipanggil bila kind = graft
   "function sharesOf(address account) view returns (uint256)",
   "function getRound(uint64 n) view returns ((uint64 start, uint64 expiry, uint256 strikeE18, uint256 startPriceE18, uint256 notional, uint256 minPremium, address picker, uint256 premium, uint256 settlePriceE18, uint256 payout, uint256 ppsStart, uint256 accStart, uint8 outcome))",
 ]);

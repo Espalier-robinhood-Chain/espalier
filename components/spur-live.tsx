@@ -1,19 +1,21 @@
 "use client";
-// Panel deposit/withdraw Spur sungguhan: approve -> simulate -> kirim -> tunggu receipt, lewat wagmi + @espalier/sdk.
-// Hanya dirender bila spurLive(symbol) (lihat trade-panels.tsx), jadi WagmiProvider pasti ada.
+// Panel deposit/withdraw sungguhan untuk Spur DAN Graft: approve -> simulate -> kirim -> tunggu receipt, lewat wagmi + @espalier/sdk.
+// Hanya dirender bila spurLive(symbol) / graftLive(symbol) (lihat trade-panels.tsx), jadi WagmiProvider pasti ada.
+// GraftVault mencerminkan SpurVault (fungsi tulis, antrean, klaim, dan error sama); bedanya hanya aset: Spur = Stock Token,
+// Graft = USDG (collateral dan premium). Karena itu `kind` hanya memilih target env, ABI, pembaca on-chain, dan teks.
 //
 // Aturan SpurVault yang tercermin di sini (contracts/src/SpurVault.sol):
 //  * deposit masuk antrean dan baru menjadi share saat roll berikutnya; sebelum itu bisa dibatalkan penuh (cancelDeposit);
 //  * penarikan (requestWithdraw) diminta dalam SHARE, dihitung pada harga per share saat roll berikutnya, lalu diambil
 //    lewat claimWithdraw; selama antre, share tetap menanggung risiko dan tetap berhak atas premium round yang berjalan;
 //  * premium USDG diklaim terpisah (claimPremium); jeda hanya menutup deposit, jalan keluar tidak pernah ditutup.
-import { decodeSpurError, readSpurAccount, readSpurInfo, spurWriteAbi, type SpurAccountState, type SpurVaultInfo } from "@espalier/sdk";
+import { decodeGraftError, decodeSpurError, graftWriteAbi, readGraftAccount, readGraftInfo, readSpurAccount, readSpurInfo, spurWriteAbi, type SpurAccountState, type SpurVaultInfo } from "@espalier/sdk";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { erc20Abi, type Hash, type PublicClient } from "viem";
 import { useAccount, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
 import { robinhoodMainnet, robinhoodTestnet } from "@/lib/web3/chains";
 import { web3Env } from "@/lib/web3/env";
-import { capRoom, checkDeposit, planWithdraw, queuedDeposit, queuedWithdrawShares, sharesToAssets, spurErrorMessage, withdrawableShares } from "@/lib/web3/spur";
+import { capRoom, checkDeposit, graftInfoToSpurInfo, planWithdraw, queuedDeposit, queuedWithdrawShares, sharesToAssets, spurErrorMessage, withdrawableShares } from "@/lib/web3/spur";
 import { formatAmount, isUserRejection, parseAmount } from "@/lib/web3/trade";
 import { Button, Panel } from "./ui";
 import { AmountField, Segmented, note } from "./trade-fields";
@@ -23,8 +25,11 @@ type Status = { kind: "idle" } | { kind: "busy"; text: string } | { kind: "ok"; 
 const REFRESH_MS = 30_000; // roll, settlement, dan klaim terjadi tanpa interaksi pengguna
 const explorerOf = (chainId: number) => [robinhoodMainnet, robinhoodTestnet].find((c) => c?.id === chainId)?.blockExplorers?.default.url;
 
-export function LiveDepositWithdrawPanel({ symbol, unit }: { symbol: string; unit?: string }) {
-  const target = web3Env.spur!; // dijamin oleh spurLive()
+export function LiveDepositWithdrawPanel({ symbol, unit, kind = "spur" }: { symbol: string; unit?: string; kind?: "spur" | "graft" }) {
+  const isGraft = kind === "graft";
+  const target = (isGraft ? web3Env.graft : web3Env.spur)!; // dijamin oleh spurLive() / graftLive()
+  const writeAbi = isGraft ? graftWriteAbi : spurWriteAbi;
+  const decode = isGraft ? decodeGraftError : decodeSpurError;
   const { address: account, chainId: walletChain, isConnected } = useAccount();
   const client = usePublicClient({ chainId: target.chainId }) as unknown as PublicClient | undefined;
   const { switchChainAsync } = useSwitchChain();
@@ -50,11 +55,11 @@ export function LiveDepositWithdrawPanel({ symbol, unit }: { symbol: string; uni
   useEffect(() => {
     if (!client) return;
     let off = false;
-    readSpurInfo(client, vault)
+    (isGraft ? readGraftInfo(client, vault).then(graftInfoToSpurInfo) : readSpurInfo(client, vault))
       .then((i) => { if (!off) setInfo(i); })
       .catch(() => { if (!off) setStatus({ kind: "error", text: "Could not read the vault on-chain. Check the vault address and network." }); });
     return () => { off = true; };
-  }, [client, vault]);
+  }, [client, vault, isGraft]);
 
   // Keadaan vault dan akun. Berkala, karena roll dan settlement terjadi tanpa interaksi pengguna.
   useEffect(() => {
@@ -64,11 +69,11 @@ export function LiveDepositWithdrawPanel({ symbol, unit }: { symbol: string; uni
   useEffect(() => {
     if (!client || !info || !account) return;
     let off = false;
-    readSpurAccount(client, vault, info, account)
+    (isGraft ? readGraftAccount : readSpurAccount)(client, vault, info, account)
       .then((s) => { if (!off) setRead({ account, state: s }); })
       .catch(() => { if (!off) setRead(null); });
     return () => { off = true; };
-  }, [client, info, account, vault, nonce]);
+  }, [client, info, account, vault, nonce, isGraft]);
 
   const send = useCallback(async (label: string, fn: () => Promise<Hash>, done: string) => {
     if (!client) return;
@@ -82,17 +87,17 @@ export function LiveDepositWithdrawPanel({ symbol, unit }: { symbol: string; uni
       setAmount("");
       setNonce((n) => n + 1);
     } catch (e) {
-      setStatus(isUserRejection(e) ? { kind: "idle" } : { kind: "error", text: spurErrorMessage(decodeSpurError(e), info ? { ...info, assetSymbol: assetUnit } : undefined) });
+      setStatus(isUserRejection(e) ? { kind: "idle" } : { kind: "error", text: spurErrorMessage(decode(e), info ? { ...info, assetSymbol: assetUnit } : undefined) });
     }
-  }, [client, info, assetUnit]);
+  }, [client, info, assetUnit, decode]);
 
   // Simulasi dulu (error kontrak muncul sebagai pesan, bukan transaksi yang gagal), lalu kirim.
   const call = useCallback(async (fn: "deposit" | "cancelDeposit" | "requestWithdraw" | "cancelWithdraw" | "claimWithdraw" | "claimPremium", args: readonly bigint[]) => {
     if (!client || !account) throw new Error("not ready");
-    const req = { address: vault, abi: spurWriteAbi, functionName: fn, args } as never;
+    const req = { address: vault, abi: writeAbi, functionName: fn, args } as never;
     await client.simulateContract({ ...(req as object), account } as never);
     return writeContractAsync({ ...(req as object), chainId: target.chainId } as never) as Promise<Hash>;
-  }, [client, account, vault, writeContractAsync, target.chainId]);
+  }, [client, account, vault, writeAbi, writeContractAsync, target.chainId]);
 
   const ensureChain = async () => {
     if (onTargetChain) return true;
@@ -169,7 +174,9 @@ export function LiveDepositWithdrawPanel({ symbol, unit }: { symbol: string; uni
         )}
         <p className={note}>
           {mode === "deposit"
-            ? "Deposits join the next round. Until then you can cancel and get everything back."
+            ? (isGraft
+              ? "Deposits join the next round as collateral for the put. Until then you can cancel and get everything back."
+              : "Deposits join the next round. Until then you can cancel and get everything back.")
             : "Withdrawals queue to the next round and are priced then, after this round's option settles. Until the round ends your shares still earn its premium."}
         </p>
         {st && (

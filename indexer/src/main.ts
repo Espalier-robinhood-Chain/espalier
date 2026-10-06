@@ -17,14 +17,17 @@ const sync: SyncConfig = { startBlock: cfg.startBlock, confirmations: cfg.confir
 const boot = await bootstrap(chain, store);
 log(`indexer siap: ${boot.meta.symbol} @ ${boot.meta.address} (chain ${cfg.chainId}), ${boot.meta.components.length} komponen`);
 
-// Spur (opsional): jalur sendiri dengan kursor + snapshot sendiri, jadi galat di sini tidak menghentikan Cordon dan sebaliknya.
-let spur: { chain: Awaited<ReturnType<typeof createSpurChain>>; store: ReturnType<typeof createSpurStore>; sync: SpurSyncConfig; boot: Awaited<ReturnType<typeof bootstrapSpur>> } | null = null;
-if (cfg.spur) {
-  const sChain = await createSpurChain(cfg.rpcUrl, cfg.spur.vault, cfg.chainId);
-  const sStore = createSpurStore(cfg.supabaseUrl, cfg.serviceKey, `spur:${cfg.chainId}:${cfg.spur.vault.toLowerCase()}`);
-  const sBoot = await bootstrapSpur(sChain, sStore, cfg.spur.symbol);
-  spur = { chain: sChain, store: sStore, boot: sBoot, sync: { startBlock: cfg.spur.startBlock, confirmations: cfg.confirmations, logChunk: cfg.logChunk, balanceBatch: cfg.balanceBatch } };
-  log(`spur siap: ${cfg.spur.symbol ?? `s${sBoot.meta.assetSymbol}`} @ ${sBoot.meta.address}`);
+// Spur dan Graft (opsional): masing-masing jalur sendiri dengan kursor + snapshot sendiri, jadi galat di satu jalur
+// tidak menghentikan Cordon atau vault lain. Graft memakai kode yang sama (GraftVault mencerminkan SpurVault).
+type VaultPipe = { name: "spur" | "graft"; chain: Awaited<ReturnType<typeof createSpurChain>>; store: ReturnType<typeof createSpurStore>; sync: SpurSyncConfig; boot: Awaited<ReturnType<typeof bootstrapSpur>> };
+const vaults: VaultPipe[] = [];
+for (const [name, v] of [["spur", cfg.spur], ["graft", cfg.graft]] as const) {
+  if (!v) continue;
+  const vChain = await createSpurChain(cfg.rpcUrl, v.vault, cfg.chainId, name);
+  const vStore = createSpurStore(cfg.supabaseUrl, cfg.serviceKey, `${name}:${cfg.chainId}:${v.vault.toLowerCase()}`);
+  const vBoot = await bootstrapSpur(vChain, vStore, v.symbol);
+  vaults.push({ name, chain: vChain, store: vStore, boot: vBoot, sync: { startBlock: v.startBlock, confirmations: cfg.confirmations, logChunk: cfg.logChunk, balanceBatch: cfg.balanceBatch } });
+  log(`${name} siap: ${v.symbol ?? (name === "graft" ? "g" : "s") + (vBoot.meta.underlyingSymbol ?? vBoot.meta.assetSymbol)} @ ${vBoot.meta.address}`);
 }
 
 let stop = false;
@@ -46,11 +49,10 @@ while (!stop) {
       if (!ok) log("snapshot NAV dilewati (harga komponen tidak valid atau belum ada blok aman)");
     }
   });
-  if (spur) {
-    const s = spur;
-    await attempt("spur", async () => {
-      const r = await syncSpurOnce(s.chain, s.store, s.sync, s.boot);
-      if (r) log(`spur blok ${r.from}..${r.to}: ${r.events} event, ${r.rounds} round, ${r.harvests} harvest, ${r.positions} posisi`);
+  for (const v of vaults) {
+    await attempt(v.name, async () => {
+      const r = await syncSpurOnce(v.chain, v.store, v.sync, v.boot);
+      if (r) log(`${v.name} blok ${r.from}..${r.to}: ${r.events} event, ${r.rounds} round, ${r.harvests} harvest, ${r.positions} posisi`);
     });
   }
   if (!failed) { failures = 0; await sleep(cfg.pollMs); continue; }

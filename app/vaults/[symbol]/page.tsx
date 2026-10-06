@@ -14,7 +14,7 @@ import { EmptyState, Panel } from "@/components/ui";
 import { UpsideSimulator } from "@/components/upside-simulator";
 import { ConfigError, SYMBOL } from "@/lib/api/http";
 import { getVault } from "@/lib/api/queries";
-import { spurLive } from "@/lib/web3/env";
+import { graftLive, spurLive } from "@/lib/web3/env";
 import { vaultTopics } from "@/lib/realtime/live";
 import { pct, usd } from "@/lib/format";
 
@@ -55,12 +55,22 @@ async function load(symbol: string): Promise<Loaded> {
   }
 }
 
+// Vault yang dikonfigurasi live (env + wallet aktif) tetapi belum punya baris di Supabase, karena indexer belum jalan atau belum
+// melihat event pertama. Halaman tetap dibuka (tanpa round/riwayat) supaya deposit pertama, yang memulai round pertama, bisa dilakukan.
+// Underlying diturunkan dari simbol (s/g + ticker, aturan simbol bawaan indexer). id kosong = tanpa Realtime.
+function configuredVault(symbol: string): Vault | null {
+  const kind = spurLive(symbol) ? "spur" : graftLive(symbol) ? "graft" : null;
+  if (!kind) return null;
+  return { id: "", symbol, kind, underlying: symbol.slice(1), address: "", isDemo: false, realizedApy: null, settledRounds: 0, currentRound: null, premiumHint: null, rounds: [] };
+}
+
 export default async function VaultDetailPage({ params }: Props) {
   const { symbol } = await params;
   if (!SYMBOL.test(symbol)) notFound();
   const data = await load(symbol);
-  if (data.kind === "missing") notFound();
-  const vault = data.kind === "ok" ? data.vault : null;
+  const fallback = data.kind === "missing" ? configuredVault(symbol) : null;
+  if (data.kind === "missing" && !fallback) notFound();
+  const vault = data.kind === "ok" ? data.vault : fallback;
 
   return (
     <>
@@ -94,7 +104,7 @@ export default async function VaultDetailPage({ params }: Props) {
               )}
             </div>
             {vault?.isDemo && <p><span className="rounded-full border border-wire px-3 py-1 text-sm text-bark">Demo data · not live prices</span></p>}
-            {vault && <LiveUpdates topics={vaultTopics(vault.id)} announcement={roundAnnouncement(vault)} />}
+            {vault && vault.id !== "" && <LiveUpdates topics={vaultTopics(vault.id)} announcement={roundAnnouncement(vault)} />}
           </div>
         </section>
 
@@ -147,7 +157,7 @@ function Body({ vault }: { vault: Vault }) {
   // Panel live: deposit hanya mengantre untuk roll berikutnya, dan vault yang baru di-deploy (atau yang sedang di antara dua
   // round) tidak punya round aktif. Tanpa pengecualian ini round pertama tidak pernah bisa dimulai lewat UI (roll tanpa share
   // dilewati). Simulator tetap tampil bila ada round aktif; bila tidak ada, panel menjelaskan bahwa strike ditetapkan saat roll.
-  const live = isSpur && spurLive(symbol);
+  const live = isSpur ? spurLive(symbol) : graftLive(symbol);
   const canDeposit = !isSpur || sim !== null || live;
   const shown = rounds.slice(0, HISTORY_MAX);
   // Premium kumulatif dari round settled (lama ke baru). Garis hanya digambar bila ada minimal dua titik.
@@ -161,8 +171,8 @@ function Body({ vault }: { vault: Vault }) {
   return (
     <div className="wrap grid gap-6 py-12 md:grid-cols-[1fr_22.5rem] md:items-start">
       <div className="min-w-0 space-y-6">
-        {kind === "graft" && (
-          <p className="flex gap-3 rounded-[16px] border border-dashed border-wire p-4 text-[.95rem]"><span aria-hidden>◌</span><span><b>After MVP.</b> This vault is a preview. Graft Vaults are demo only for now.</span></p>
+        {kind === "graft" && !live && (
+          <p className="flex gap-3 rounded-[16px] border border-dashed border-wire p-4 text-[.95rem]"><span aria-hidden>◌</span><span><b>Preview.</b> This Graft panel is a simulation until its vault is connected to a wallet network.</span></p>
         )}
 
         <Panel title="Current round" sub={cur ? `Round #${cur.no} · ${ROUND_STATUS[cur.status] ?? cur.status}` : undefined}>
@@ -230,7 +240,9 @@ function Body({ vault }: { vault: Vault }) {
               <p className="text-bark">Deposits open once a round is set with a strike and a starting price. You will see the upside simulator first.</p>
             </Panel>
           )}
-        {live && sim === null && <p className="text-sm text-bark">No round is open right now. A deposit made now joins the next round. Its strike (set above the price when that round starts) and premium are fixed at that moment, and any gain above the strike goes to the Picker.</p>}
+        {live && sim === null && (isSpur
+          ? <p className="text-sm text-bark">No round is open right now. A deposit made now joins the next round. Its strike (set above the price when that round starts) and premium are fixed at that moment, and any gain above the strike goes to the Picker.</p>
+          : <p className="text-sm text-bark">No round is open right now. A deposit made now joins the next round as collateral. Its strike (set below the price when that round starts) and premium are fixed at that moment, and any fall below the strike is paid to the Picker out of the collateral.</p>)}
         <p className="text-sm text-bark">{live ? "Transactions are sent from your wallet and settle on-chain." : "Simulation only. No transaction is sent in this preview."}</p>
         <Risk kind={kind} />
       </aside>

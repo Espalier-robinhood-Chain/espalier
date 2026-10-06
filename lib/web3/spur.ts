@@ -1,7 +1,19 @@
 // Logika murni untuk panel deposit/withdraw Spur (tanpa viem/wagmi/React) supaya bisa dites dengan node --test.
 // Hanya `import type`: aman dihapus oleh Node dan tidak menarik SDK ke tes.
-import type { SpurAccountState, SpurError, SpurVaultInfo } from "@espalier/sdk";
+import type { GraftVaultInfo, SpurAccountState, SpurError, SpurVaultInfo } from "@espalier/sdk";
 import { formatAmount } from "./trade.ts";
+
+/**
+ * GraftVault: aset vault = USDG = premium (kontrak tidak punya getter PREMIUM terpisah di SDK), jadi info Graft dipetakan ke bentuk
+ * `SpurVaultInfo` supaya panel, `checkDeposit`, dan `spurErrorMessage` dipakai bersama tanpa cabang per jenis vault.
+ */
+export function graftInfoToSpurInfo(g: GraftVaultInfo): SpurVaultInfo {
+  return {
+    asset: g.asset, assetSymbol: g.assetSymbol, assetDecimals: g.assetDecimals,
+    premium: g.asset, premiumSymbol: g.assetSymbol, premiumDecimals: g.assetDecimals,
+    minDeposit: g.minDeposit, depositCap: g.depositCap,
+  };
+}
 
 export const UINT256_MAX = (1n << 256n) - 1n;
 

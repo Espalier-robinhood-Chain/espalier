@@ -13,6 +13,8 @@ export interface IndexerConfig {
   navEveryMs: number;
   /** Spur Vault (opsional): null bila SPUR_VAULT_ADDRESS kosong. */
   spur: { vault: `0x${string}`; startBlock: bigint; symbol: string | null } | null;
+  /** Graft Vault (opsional): null bila GRAFT_VAULT_ADDRESS kosong. Bentuknya sama dengan `spur`. */
+  graft: { vault: `0x${string}`; startBlock: bigint; symbol: string | null } | null;
 }
 
 const need = (e: Record<string, string | undefined>, k: string) => {
@@ -36,6 +38,7 @@ export function loadConfig(e: Record<string, string | undefined>): IndexerConfig
   if (!/^https?:\/\//.test(supabaseUrl)) throw new Error("env SUPABASE_URL harus diawali http(s)://");
   return {
     spur: loadSpur(e),
+    graft: loadGraft(e),
     rpcUrl: need(e, "INDEXER_RPC_URL"),
     chainId: int(e, "INDEXER_CHAIN_ID", 46630, 1),
     vault: vault as `0x${string}`,
@@ -50,13 +53,16 @@ export function loadConfig(e: Record<string, string | undefined>): IndexerConfig
   };
 }
 
-function loadSpur(e: Record<string, string | undefined>): IndexerConfig["spur"] {
-  const vault = e.SPUR_VAULT_ADDRESS?.trim();
-  if (!vault) return null; // Spur tidak diindeks; konfigurasi lama tetap valid
-  if (!/^0x[0-9a-fA-F]{40}$/.test(vault) || /^0x0{40}$/.test(vault)) throw new Error("env SPUR_VAULT_ADDRESS bukan alamat valid");
-  const start = need(e, "SPUR_START_BLOCK"); // blok deploy SpurVault
-  if (!/^\d+$/.test(start)) throw new Error("env SPUR_START_BLOCK harus bilangan bulat >= 0");
-  const symbol = e.SPUR_VAULT_SYMBOL?.trim() || null; // default: "s" + simbol aset (mis. sNVDA)
-  if (symbol !== null && !/^[A-Za-z0-9._-]{1,32}$/.test(symbol)) throw new Error("env SPUR_VAULT_SYMBOL tidak valid");
+// Satu pemuat untuk Spur dan Graft: prefiks env berbeda (SPUR_* / GRAFT_*), aturan sama.
+function loadVault(e: Record<string, string | undefined>, p: "SPUR" | "GRAFT"): IndexerConfig["spur"] {
+  const vault = e[`${p}_VAULT_ADDRESS`]?.trim();
+  if (!vault) return null; // tidak diindeks; konfigurasi lama tetap valid
+  if (!/^0x[0-9a-fA-F]{40}$/.test(vault) || /^0x0{40}$/.test(vault)) throw new Error(`env ${p}_VAULT_ADDRESS bukan alamat valid`);
+  const start = need(e, `${p}_START_BLOCK`); // blok deploy vault
+  if (!/^\d+$/.test(start)) throw new Error(`env ${p}_START_BLOCK harus bilangan bulat >= 0`);
+  const symbol = e[`${p}_VAULT_SYMBOL`]?.trim() || null; // default: "s"/"g" + ticker (mis. sNVDA, gNVDA)
+  if (symbol !== null && !/^[A-Za-z0-9._-]{1,32}$/.test(symbol)) throw new Error(`env ${p}_VAULT_SYMBOL tidak valid`);
   return { vault: vault as `0x${string}`, startBlock: BigInt(start), symbol };
 }
+const loadSpur = (e: Record<string, string | undefined>) => loadVault(e, "SPUR");
+const loadGraft = (e: Record<string, string | undefined>) => loadVault(e, "GRAFT");

@@ -58,3 +58,11 @@ test("KEEPER_ROLE = keccak256('KEEPER_ROLE') dan selector terdefinisi", () => {
   assert.ok(toFunctionSelector("settle(address,uint64,uint80)").length === 10);
   void settlementOracleAbi;
 });
+
+// GraftVault dijalankan keeper yang sama: fungsi keeper dan getter konfigurasi wajib ada di sumbernya juga (+ UNDERLYING, token acuan harga).
+test("GraftVault punya fungsi keeper dan getter yang sama, ditambah UNDERLYING", () => {
+  const g = solSignatures("GraftVault.sol"), vars = publicVars("GraftVault.sol");
+  for (const s of ["rollRound(uint64)", "closeUnsold()", "settleRound()", "getRound(uint64)"]) assert.ok(g.has(s), `${s} tidak ada di GraftVault.sol`);
+  for (const v of ["ASSET", "UNDERLYING", "ROUTER", "SETTLEMENT", "AUCTION", "FILL_WINDOW", "MIN_DURATION", "MAX_DURATION"]) assert.ok(vars.has(v), `getter ${v} tidak ada di GraftVault.sol`);
+  assert.ok(spurVaultAbi.filter(isFn).some((f) => f.name === "UNDERLYING"));
+});

@@ -17,6 +17,9 @@ export type VaultTarget = { address: `0x${string}`; chainId: number; symbol: str
 /** SpurVault yang panel deposit/withdraw-nya hidup (satu per deployment, mis. sNVDA). */
 export type SpurTarget = { address: `0x${string}`; chainId: number; symbol: string };
 
+/** GraftVault yang panel deposit/withdraw-nya hidup (satu per deployment, mis. gNVDA). Bentuknya sama dengan SpurTarget. */
+export type GraftTarget = SpurTarget;
+
 export type Web3Env = {
   /** undefined = mode simulasi: wallet connect mati dan semua panel tetap demo. */
   mode?: NetworkMode;
@@ -28,6 +31,8 @@ export type Web3Env = {
   vault?: VaultTarget;
   /** undefined = panel deposit/withdraw Spur tetap mode demo (tanpa transaksi). */
   spur?: SpurTarget;
+  /** undefined = panel deposit/withdraw Graft tetap mode demo (tanpa transaksi). */
+  graft?: GraftTarget;
 };
 
 const clean = (v?: string) => v?.trim() || undefined;
@@ -48,23 +53,31 @@ export function resolveVaultTarget(e: Record<string, string | undefined>): Vault
 }
 
 /**
- * SpurVault dari env, dengan aturan yang sama dengan `resolveVaultTarget`: alamat salah bentuk atau alamat nol, atau chain
- * yang bukan bilangan bulat positif, dianggap tidak diisi. Simbol default `sNVDA` = simbol bawaan indexer (`s` + ticker aset),
- * dan harus sama dengan `vaults.symbol` di Supabase karena itulah yang ada di URL /vaults/<symbol>.
+ * Satu pemuat untuk SpurVault dan GraftVault (keduanya "vault berantrean" dengan alamat + chain + simbol), aturannya sama dengan
+ * `resolveVaultTarget`: alamat salah bentuk atau alamat nol, atau chain yang bukan bilangan bulat positif, dianggap tidak
+ * diisi (panel jatuh ke demo). Simbol default = simbol bawaan indexer (`s`/`g` + ticker aset), dan harus sama dengan
+ * `vaults.symbol` di Supabase karena itulah yang ada di URL /vaults/<symbol>.
  */
-export function resolveSpurTarget(e: Record<string, string | undefined>): SpurTarget | undefined {
-  const address = clean(e.NEXT_PUBLIC_SPUR_VAULT_ADDRESS);
+function resolveQueuedVaultTarget(e: Record<string, string | undefined>, p: "SPUR" | "GRAFT", defaultSymbol: string): SpurTarget | undefined {
+  const address = clean(e[`NEXT_PUBLIC_${p}_VAULT_ADDRESS`]);
   if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address) || /^0x0{40}$/.test(address)) return undefined;
-  const rawChain = clean(e.NEXT_PUBLIC_SPUR_VAULT_CHAIN_ID) ?? "46630";
+  const rawChain = clean(e[`NEXT_PUBLIC_${p}_VAULT_CHAIN_ID`]) ?? "46630";
   if (!/^\d+$/.test(rawChain)) return undefined;
   const chainId = Number(rawChain);
   if (!Number.isSafeInteger(chainId) || chainId <= 0) return undefined;
-  return { address: address as `0x${string}`, chainId, symbol: clean(e.NEXT_PUBLIC_SPUR_VAULT_SYMBOL) ?? "sNVDA" };
+  return { address: address as `0x${string}`, chainId, symbol: clean(e[`NEXT_PUBLIC_${p}_VAULT_SYMBOL`]) ?? defaultSymbol };
 }
+
+/** SpurVault dari env. Simbol default `sNVDA`. */
+export const resolveSpurTarget = (e: Record<string, string | undefined>): SpurTarget | undefined => resolveQueuedVaultTarget(e, "SPUR", "sNVDA");
+
+/** GraftVault dari env. Simbol default `gNVDA`. */
+export const resolveGraftTarget = (e: Record<string, string | undefined>): GraftTarget | undefined => resolveQueuedVaultTarget(e, "GRAFT", "gNVDA");
 
 export function resolveWeb3Env(e: Record<string, string | undefined>): Web3Env {
   const vault = resolveVaultTarget(e);
   const spur = resolveSpurTarget(e);
+  const graft = resolveGraftTarget(e);
   const mode = resolveNetworkMode(e.NEXT_MODE);
   return {
     ...(mode ? { mode } : {}),
@@ -74,6 +87,7 @@ export function resolveWeb3Env(e: Record<string, string | undefined>): Web3Env {
     siteUrl: clean(e.NEXT_PUBLIC_SITE_URL) ?? "http://localhost:3000",
     ...(vault ? { vault } : {}),
     ...(spur ? { spur } : {}),
+    ...(graft ? { graft } : {}),
   };
 }
 
@@ -91,6 +105,9 @@ export const web3Env = resolveWeb3Env({
   NEXT_PUBLIC_SPUR_VAULT_ADDRESS: process.env.NEXT_PUBLIC_SPUR_VAULT_ADDRESS,
   NEXT_PUBLIC_SPUR_VAULT_CHAIN_ID: process.env.NEXT_PUBLIC_SPUR_VAULT_CHAIN_ID,
   NEXT_PUBLIC_SPUR_VAULT_SYMBOL: process.env.NEXT_PUBLIC_SPUR_VAULT_SYMBOL,
+  NEXT_PUBLIC_GRAFT_VAULT_ADDRESS: process.env.NEXT_PUBLIC_GRAFT_VAULT_ADDRESS,
+  NEXT_PUBLIC_GRAFT_VAULT_CHAIN_ID: process.env.NEXT_PUBLIC_GRAFT_VAULT_CHAIN_ID,
+  NEXT_PUBLIC_GRAFT_VAULT_SYMBOL: process.env.NEXT_PUBLIC_GRAFT_VAULT_SYMBOL,
 });
 
 /**
@@ -117,6 +134,13 @@ export function isSpurLive(env: Web3Env, symbol: string): boolean {
   return env.spur.symbol === symbol && env.spur.chainId === MODE_CHAIN_ID[env.mode];
 }
 
+/** Panel deposit/withdraw Graft sungguhan: aturan yang sama dengan `isSpurLive`, untuk GraftVault. */
+export function isGraftLive(env: Web3Env, symbol: string): boolean {
+  if (!isWeb3Enabled(env) || !env.mode || !env.graft) return false;
+  return env.graft.symbol === symbol && env.graft.chainId === MODE_CHAIN_ID[env.mode];
+}
+
 export const web3Enabled = isWeb3Enabled(web3Env);
 export const tradeLive = (symbol: string) => isTradeLive(web3Env, symbol);
 export const spurLive = (symbol: string) => isSpurLive(web3Env, symbol);
+export const graftLive = (symbol: string) => isGraftLive(web3Env, symbol);

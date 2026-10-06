@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { MAINNET_PUBLIC_RPC, isSpurLive, isTradeLive, isWeb3Enabled, resolveNetworkMode, resolveSpurTarget, resolveWeb3Env } from "./env.ts";
+import { MAINNET_PUBLIC_RPC, isGraftLive, isSpurLive, isTradeLive, isWeb3Enabled, resolveGraftTarget, resolveNetworkMode, resolveSpurTarget, resolveWeb3Env } from "./env.ts";
 
 test("env kosong: wallet mati, mainnet jatuh ke RPC publik, testnet tidak ditawarkan", () => {
   const e = resolveWeb3Env({});
@@ -107,4 +107,38 @@ test("spur live: butuh wallet aktif, simbol sama, dan chain vault sama dengan NE
   assert.equal(isSpurLive(resolveWeb3Env(LIVE), "sNVDA"), false, "tanpa alamat spur");
   // CordonVault dan SpurVault saling tidak mempengaruhi.
   assert.equal(isTradeLive(resolveWeb3Env({ ...LIVE, ...SPUR }), "cMAG7"), false);
+});
+
+const GRAFT = { NEXT_PUBLIC_GRAFT_VAULT_ADDRESS: ADDR };
+
+test("graft: tanpa alamat = demo; default chain 46630 dan simbol gNVDA; env spur tidak ikut", () => {
+  assert.equal(resolveGraftTarget({}), undefined);
+  assert.deepEqual(resolveGraftTarget(GRAFT), { address: ADDR, chainId: 46630, symbol: "gNVDA" });
+  assert.equal("graft" in resolveWeb3Env({}), false);
+  assert.equal(resolveWeb3Env(GRAFT).graft?.address, ADDR);
+  // Env Spur dan Graft terpisah: mengisi satu tidak menyalakan yang lain.
+  assert.equal(resolveWeb3Env(SPUR).graft, undefined);
+  assert.equal(resolveWeb3Env(GRAFT).spur, undefined);
+  assert.equal(resolveSpurTarget(GRAFT), undefined);
+});
+
+test("graft: alamat salah bentuk, alamat nol, atau chain ngawur dianggap tidak diisi", () => {
+  for (const a of ["0x123", ADDR + "00", "0x" + "0".repeat(40), "0x" + "g".repeat(40)]) {
+    assert.equal(resolveGraftTarget({ NEXT_PUBLIC_GRAFT_VAULT_ADDRESS: a }), undefined, a);
+  }
+  for (const c of ["abc", "-1", "0", "1.5", "1e3"]) assert.equal(resolveGraftTarget({ ...GRAFT, NEXT_PUBLIC_GRAFT_VAULT_CHAIN_ID: c }), undefined, c);
+});
+
+test("graft live: butuh wallet aktif, simbol sama, dan chain vault sama dengan NEXT_MODE; tidak menyalakan Spur", () => {
+  const live = (e: Record<string, string>, sym = "gNVDA") => isGraftLive(resolveWeb3Env({ ...LIVE, ...GRAFT, ...e }), sym);
+  assert.equal(live({}), true);
+  assert.equal(live({}, "sNVDA"), false, "simbol Spur bukan simbol Graft");
+  assert.equal(live({ NEXT_PUBLIC_GRAFT_VAULT_SYMBOL: "gTSLA" }), false);
+  assert.equal(live({ NEXT_PUBLIC_GRAFT_VAULT_SYMBOL: "gTSLA" }, "gTSLA"), true);
+  assert.equal(live({ NEXT_MODE: "mainnet" }), false, "vault 46630 bukan chain mainnet");
+  assert.equal(live({ NEXT_MODE: "mainnet", NEXT_PUBLIC_GRAFT_VAULT_CHAIN_ID: "4663" }), true);
+  assert.equal(live({ NEXT_MODE: "" }), false, "tanpa NEXT_MODE = simulasi walau vault terisi");
+  assert.equal(isGraftLive(resolveWeb3Env(LIVE), "gNVDA"), false, "tanpa alamat graft");
+  assert.equal(isSpurLive(resolveWeb3Env({ ...LIVE, ...GRAFT }), "sNVDA"), false);
+  assert.equal(isSpurLive(resolveWeb3Env({ ...LIVE, ...GRAFT }), "gNVDA"), false);
 });

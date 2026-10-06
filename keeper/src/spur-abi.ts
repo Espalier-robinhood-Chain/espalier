@@ -7,6 +7,7 @@ const ROUND = "(uint64 start, uint64 expiry, uint256 strikeE18, uint256 startPri
 
 export const spurVaultAbi = parseAbi([
   "function ASSET() view returns (address)",
+  "function UNDERLYING() view returns (address)", // hanya GraftVault: Stock Token acuan harga (aset Graft = USDG)
   "function ROUTER() view returns (address)",
   "function SETTLEMENT() view returns (address)",
   "function AUCTION() view returns (address)",

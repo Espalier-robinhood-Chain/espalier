@@ -24,7 +24,7 @@ export function createSpurStore(url: string, serviceKey: string, key: string): S
     },
     async upsertVault(v) {
       // Gagal unik di `symbol` = ada vault demo bersimbol sama dengan alamat lain: hapus/ganti simbol baris demo itu dulu.
-      const { data, error } = await db.from("vaults").upsert({ address: v.address, kind: "spur", underlying: v.underlying, symbol: v.symbol }, { onConflict: "address" }).select("id").single();
+      const { data, error } = await db.from("vaults").upsert({ address: v.address, kind: v.kind, underlying: v.underlying, symbol: v.symbol }, { onConflict: "address" }).select("id").single();
       check(`upsert vault ${v.symbol}`, error);
       return data!.id as string;
     },

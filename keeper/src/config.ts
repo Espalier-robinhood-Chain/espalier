@@ -3,6 +3,8 @@ export interface Config {
   mode: "dry-run"; pollMs: number; thresholdBps: number; minIntervalDays: number; slippageBps: number; minTradeUsd: number; maxTrades: number;
   /** Keeper Spur (opsional): null bila SPUR_VAULT_ADDRESS kosong. */
   spur: SpurConfig | null;
+  /** Keeper Graft (opsional): null bila GRAFT_VAULT_ADDRESS kosong. Kunci keeper dan RFQ dipakai bersama Spur. */
+  graft: SpurConfig | null;
 }
 export interface SpurConfig {
   vault: `0x${string}`; mode: "dry-run" | "live"; keeperAddress: `0x${string}` | null; privateKey: `0x${string}` | null;
@@ -28,23 +30,25 @@ export function loadConfig(e: Record<string, string | undefined>): Config {
     pollMs: int(e, "POLL_MS", 60_000, 5000), thresholdBps: int(e, "DRIFT_THRESHOLD_BPS", 100, 1, 10_000),
     minIntervalDays: int(e, "MIN_INTERVAL_DAYS", 30, 0), slippageBps: int(e, "SLIPPAGE_BPS", 50, 0, 10_000),
     minTradeUsd: int(e, "MIN_TRADE_USD", 50, 0), maxTrades: int(e, "MAX_TRADES", 16, 1, 64),
-    spur: loadSpur(e),
+    spur: loadVault(e, "SPUR"),
+    graft: loadVault(e, "GRAFT"),
   };
 }
 
 const ADDR = /^0x[0-9a-fA-F]{40}$/;
-function loadSpur(e: Record<string, string | undefined>): SpurConfig | null {
-  const vault = e.SPUR_VAULT_ADDRESS?.trim();
-  if (!vault) return null; // Spur tidak dijalankan; konfigurasi lama tetap valid
-  if (!ADDR.test(vault) || /^0x0{40}$/.test(vault)) throw new Error("env SPUR_VAULT_ADDRESS bukan alamat valid");
-  const mode = e.SPUR_MODE?.trim() || "dry-run"; // aman secara default: live harus diminta eksplisit
-  if (mode !== "dry-run" && mode !== "live") throw new Error(`env SPUR_MODE harus dry-run atau live (bukan ${mode})`);
+// Satu pemuat untuk Spur dan Graft: prefiks env berbeda (SPUR_* / GRAFT_*), aturan sama. KEEPER_* dan RFQ_* dipakai bersama.
+function loadVault(e: Record<string, string | undefined>, p: "SPUR" | "GRAFT"): SpurConfig | null {
+  const vault = e[`${p}_VAULT_ADDRESS`]?.trim();
+  if (!vault) return null; // tidak dijalankan; konfigurasi lama tetap valid
+  if (!ADDR.test(vault) || /^0x0{40}$/.test(vault)) throw new Error(`env ${p}_VAULT_ADDRESS bukan alamat valid`);
+  const mode = e[`${p}_MODE`]?.trim() || "dry-run"; // aman secara default: live harus diminta eksplisit
+  if (mode !== "dry-run" && mode !== "live") throw new Error(`env ${p}_MODE harus dry-run atau live (bukan ${mode})`);
   const pk = e.KEEPER_PRIVATE_KEY?.trim() || null;
   if (pk !== null && !/^0x[0-9a-fA-F]{64}$/.test(pk)) throw new Error("env KEEPER_PRIVATE_KEY harus 0x + 64 heks");
   const addr = e.KEEPER_ADDRESS?.trim() || null;
   if (addr !== null && !ADDR.test(addr)) throw new Error("env KEEPER_ADDRESS bukan alamat valid");
-  if (mode === "live" && pk === null) throw new Error("SPUR_MODE=live butuh KEEPER_PRIVATE_KEY");
-  if (mode === "dry-run" && pk === null && addr === null) throw new Error("SPUR_MODE=dry-run butuh KEEPER_ADDRESS (akun KEEPER untuk simulasi)");
+  if (mode === "live" && pk === null) throw new Error(`${p}_MODE=live butuh KEEPER_PRIVATE_KEY`);
+  if (mode === "dry-run" && pk === null && addr === null) throw new Error(`${p}_MODE=dry-run butuh KEEPER_ADDRESS (akun KEEPER untuk simulasi)`);
   const rfqUrl = e.RFQ_URL?.trim() || null;
   if (rfqUrl !== null && !/^https?:\/\//.test(rfqUrl)) throw new Error("env RFQ_URL harus diawali http(s)://");
   return {

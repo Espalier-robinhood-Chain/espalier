@@ -7,7 +7,8 @@ import { parseAbi } from "viem";
 
 const events = parseAbi([...SPUR_EVENT_SIGNATURES]);
 
-export async function createSpurChain(rpcUrl: string, vault: `0x${string}`, expectChainId: number): Promise<SpurChain> {
+/** `kind` "graft" memakai ABI/event yang sama (GraftVault mencerminkan SpurVault), tetapi meta-nya membaca `UNDERLYING`. */
+export async function createSpurChain(rpcUrl: string, vault: `0x${string}`, expectChainId: number, kind: "spur" | "graft" = "spur"): Promise<SpurChain> {
   // cacheTime 0: viem menyimpan getBlockNumber 4 detik secara bawaan; kursor indexer harus mengikuti kepala chain, bukan cache.
   const client = createPublicClient({ transport: http(rpcUrl, { retryCount: 3 }), cacheTime: 0 }) as PublicClient;
   const actual = await client.getChainId();
@@ -28,7 +29,15 @@ export async function createSpurChain(rpcUrl: string, vault: `0x${string}`, expe
         client.readContract({ address: asset, abi: erc20Abi, functionName: "decimals" }),
         client.readContract({ address: premium, abi: erc20Abi, functionName: "decimals" }),
       ]);
-      return { address, assetSymbol, assetDecimals, premiumDecimals, shareDecimals: 18 }; // share vault berskala WAD (SpurVault)
+      if (kind === "graft") {
+        const underlying = await client.readContract({ ...base, functionName: "UNDERLYING" });
+        const [underlyingSymbol, underlyingDecimals] = await Promise.all([
+          client.readContract({ address: underlying, abi: erc20Abi, functionName: "symbol" }),
+          client.readContract({ address: underlying, abi: erc20Abi, functionName: "decimals" }),
+        ]);
+        return { address, kind, assetSymbol, assetDecimals, premiumDecimals, shareDecimals: 18, underlyingSymbol, notionalDecimals: underlyingDecimals };
+      }
+      return { address, kind, assetSymbol, assetDecimals, premiumDecimals, shareDecimals: 18 }; // share vault berskala WAD (SpurVault)
     },
     async events(from, to): Promise<SpurEvent[]> {
       const logs = await client.getLogs({ address, events, fromBlock: from, toBlock: to });

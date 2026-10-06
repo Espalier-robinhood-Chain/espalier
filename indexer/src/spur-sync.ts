@@ -11,7 +11,15 @@ import { chunkRanges, lower, toDecimal } from "./decimal.ts";
 import { applyEvents, ledgerFromJson, ledgerToJson, newLedger, type Effects, type Ledger, type SpurEvent } from "./spur-ledger.ts";
 import type { PositionRow, SyncConfig } from "./sync.ts";
 
-export interface SpurMeta { address: string; assetSymbol: string; assetDecimals: number; premiumDecimals: number; shareDecimals: number }
+export interface SpurMeta {
+  address: string; assetSymbol: string; assetDecimals: number; premiumDecimals: number; shareDecimals: number;
+  /** Default "spur". Graft memakai struct round, event, dan getter akun yang sama; yang beda hanya tiga bidang di bawah. */
+  kind?: "spur" | "graft";
+  /** Ticker acuan harga (untuk Graft: simbol `UNDERLYING`). Default = `assetSymbol` (Spur: aset vault itu sendiri). */
+  underlyingSymbol?: string;
+  /** Desimal `notional`. Spur: desimal aset vault. Graft: desimal Stock Token (aset vault-nya USDG, notional-nya jumlah saham). */
+  notionalDecimals?: number;
+}
 /** Bentuk `SpurVault.getRound(n)`. `outcome`: 0 Pending, 1 Settled, 2 ClosedUnsold. */
 export interface OnchainRound {
   start: bigint; expiry: bigint; strikeE18: bigint; startPriceE18: bigint; notional: bigint; minPremium: bigint;
@@ -38,7 +46,7 @@ export interface SpurStore {
   loadState(): Promise<unknown>;
   /** Simpan kursor dan ledger dalam satu tulis atomik. */
   saveSnapshot(cursor: bigint, state: unknown): Promise<void>;
-  upsertVault(v: { address: string; symbol: string; underlying: string }): Promise<string>;
+  upsertVault(v: { address: string; symbol: string; underlying: string; kind: "spur" | "graft" }): Promise<string>;
   upsertRounds(vaultId: string, rows: RoundRow[]): Promise<void>;
   upsertPositions(rows: PositionRow[]): Promise<void>;
   deletePositions(contract: string, accounts: string[]): Promise<void>;
@@ -51,8 +59,10 @@ export interface SpurSyncResult { from: bigint; to: bigint; events: number; roun
 
 export async function bootstrapSpur(chain: SpurChain, store: SpurStore, symbolOverride: string | null): Promise<SpurBoot> {
   const meta = await chain.meta();
-  const symbol = symbolOverride ?? `s${meta.assetSymbol}`;
-  const vaultId = await store.upsertVault({ address: lower(meta.address), symbol, underlying: meta.assetSymbol });
+  const kind = meta.kind ?? "spur";
+  const underlying = meta.underlyingSymbol ?? meta.assetSymbol;
+  const symbol = symbolOverride ?? `${kind === "graft" ? "g" : "s"}${underlying}`;
+  const vaultId = await store.upsertVault({ address: lower(meta.address), symbol, underlying, kind });
   return { meta, vaultId };
 }
 
@@ -70,7 +80,7 @@ export function roundRow(r: OnchainRound, meta: SpurMeta, no: number, settledAt:
     round_no: no,
     strike: toDecimal(r.strikeE18, 18),
     expiry: new Date(Number(r.expiry) * 1000).toISOString(),
-    notional: toDecimal(r.notional, meta.assetDecimals),
+    notional: toDecimal(r.notional, meta.notionalDecimals ?? meta.assetDecimals),
     premium_usdg: sold ? toDecimal(r.premium, meta.premiumDecimals) : null,
     spot_start: toDecimal(r.startPriceE18, 18),
     picker: sold ? lower(r.picker) : null,

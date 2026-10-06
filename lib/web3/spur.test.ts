@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { UINT256_MAX, capRoom, checkDeposit, planWithdraw, queuedDeposit, queuedWithdrawShares, sharesToAssets, spurErrorMessage, withdrawableShares } from "./spur.ts";
+import { UINT256_MAX, capRoom, graftInfoToSpurInfo, checkDeposit, planWithdraw, queuedDeposit, queuedWithdrawShares, sharesToAssets, spurErrorMessage, withdrawableShares } from "./spur.ts";
 
 const E18 = 10n ** 18n;
 const base = {
@@ -80,4 +80,12 @@ test("pesan error: setoran minimum menyebut angkanya; error tak dikenal tidak me
   assert.match(spurErrorMessage({ name: "NothingToCancel" }), /already been processed/);
   assert.match(spurErrorMessage({ name: "Unknown" }), /would fail on-chain/);
   assert.match(spurErrorMessage({ name: "NotAuction" }), /would fail on-chain/);
+});
+
+test("graftInfoToSpurInfo: premium = aset (USDG), desimal sama; field lain tetap", () => {
+  const a = "0x" + "11".repeat(20) as `0x${string}`, u = "0x" + "22".repeat(20) as `0x${string}`;
+  const out = graftInfoToSpurInfo({ asset: a, assetSymbol: "USDG", assetDecimals: 6, underlying: u, underlyingSymbol: "NVDA", underlyingDecimals: 18, minDeposit: 1_000_000n, depositCap: UINT256_MAX });
+  assert.deepEqual(out, { asset: a, assetSymbol: "USDG", assetDecimals: 6, premium: a, premiumSymbol: "USDG", premiumDecimals: 6, minDeposit: 1_000_000n, depositCap: UINT256_MAX });
+  // Dengan info Graft (USDG, 6 desimal) pesan dan pemeriksaan deposit memakai angka USDG, bukan 18 desimal.
+  assert.equal(spurErrorMessage({ name: "DepositTooSmall" }, { ...out, assetSymbol: "USDG" }), "Minimum deposit is 1 USDG.");
 });
