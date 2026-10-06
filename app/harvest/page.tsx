@@ -8,30 +8,40 @@ import { ButtonLink, EmptyState, Panel } from "@/components/ui";
 import { ConfigError } from "@/lib/api/http";
 import { getVault, listVaults } from "@/lib/api/queries";
 import { shortAddr, usd } from "@/lib/format";
+import { graftLive, spurLive, web3Env } from "@/lib/web3/env";
 
 // Round berubah tiap minggu: jangan dibekukan saat build.
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Harvest — Espalier",
-  description: "The weekly round: when it opens, when it expires, and how it settles. Demo preview.",
+  description: "The weekly round: when it opens, when it expires, and how it settles.",
 };
 
 type Vault = NonNullable<Awaited<ReturnType<typeof getVault>>>;
-type Loaded = { kind: "ok"; vault: Vault | null } | { kind: "unconfigured" } | { kind: "error" };
+type Loaded = { kind: "ok"; spur: Vault | null; graft: Vault | null } | { kind: "unconfigured" } | { kind: "error" };
 
-// Halaman ini membaca satu Spur Vault: yang punya round aktif, kalau tidak ada maka Spur pertama.
+// Halaman ini membaca satu Spur dan satu Graft Vault: yang punya round aktif, kalau tidak ada maka yang pertama.
 async function load(): Promise<Loaded> {
   try {
-    const spurs = (await listVaults()).filter((v) => v.kind === "spur");
-    const pick = spurs.find((v) => v.currentRound) ?? spurs[0];
-    return { kind: "ok", vault: pick ? await getVault(pick.symbol) : null };
+    const all = await listVaults();
+    const pick = (kind: "spur" | "graft") => { const vs = all.filter((v) => v.kind === kind); return vs.find((v) => v.currentRound) ?? vs[0]; };
+    const [s, g] = [pick("spur"), pick("graft")];
+    const [spur, graft] = await Promise.all([s ? getVault(s.symbol) : null, g ? getVault(g.symbol) : null]);
+    return { kind: "ok", spur, graft };
   } catch (e) {
     if (e instanceof ConfigError) return { kind: "unconfigured" };
     console.error(e);
     return { kind: "error" };
   }
 }
+
+// Vault yang dikonfigurasi live (env + wallet aktif) tetapi belum ada di Supabase (indexer belum jalan): tetap tampil sebagai
+// vault tanpa round, sama seperti halaman /vaults, jadi tidak jatuh ke placeholder "after MVP".
+const configuredSymbol = (kind: "spur" | "graft") => {
+  const t = kind === "spur" ? web3Env.spur : web3Env.graft;
+  return t && (kind === "spur" ? spurLive(t.symbol) : graftLive(t.symbol)) ? t.symbol : null;
+};
 
 // Kata-kata sengaja netral soal hari dan jam: aturan settlement belum final (lihat halaman vault).
 const ritual: TimelineStep[] = [
@@ -47,11 +57,51 @@ const qtyFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 });
 const H2 = "font-display text-[clamp(2rem,4.4vw,3.3rem)] leading-[1.02] font-normal tracking-[-.025em]";
 const HISTORY_MAX = 20;
 
+function VaultRoundPanel({ vault, fallback, kind }: { vault: Vault | null; fallback: string | null; kind: "spur" | "graft" }) {
+  const label = kind === "spur" ? "Spur Vault" : "Graft Vault";
+  const symbol = vault?.symbol ?? fallback;
+  const cur = vault?.currentRound ?? null;
+  if (!symbol) {
+    // Belum ada di data dan belum dikonfigurasi: placeholder tanpa angka.
+    return (
+      <Panel dashed title={kind === "spur" ? "Spur Vault" : "gNVDA"} sub={`${label} · not connected yet`}>
+        <p className="text-bark">This vault is not connected to the site yet.</p>
+        <ButtonLink href={`/vaults?kind=${kind}`} variant="ghost" className="mt-5">See {kind === "spur" ? "Spurs" : "Grafts"}</ButtonLink>
+      </Panel>
+    );
+  }
+  return (
+    <Panel title={symbol} sub={label}>
+      {cur ? (
+        <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+          {([
+            ["Strike", usd(cur.strike)],
+            ["Expires", `${expiryFmt.format(new Date(cur.expiry))} ET`],
+            ["Notional", `${qtyFmt.format(cur.notional)} ${vault?.underlying ?? ""}`],
+            ["Premium paid", cur.premiumUsdg === null ? "Not auctioned yet" : usd(cur.premiumUsdg)],
+            ["Picker", cur.picker ? shortAddr(cur.picker) : "—"],
+            ["Status", ROUND_STATUS[cur.status] ?? cur.status],
+          ] as const).map(([k, v]) => (
+            <div key={k} className="border-b border-wire/60 pb-2"><dt className="text-[.86rem] text-bark">{k}</dt><dd className="font-mono text-[1.05rem] font-medium">{v}</dd></div>
+          ))}
+        </dl>
+      ) : <p className="text-bark">No round is open right now.</p>}
+      <ButtonLink href={`/vaults/${symbol}`} variant="ghost" className="mt-5">Open {symbol}</ButtonLink>
+    </Panel>
+  );
+}
+
 export default async function HarvestPage() {
   const data = await load();
-  const vault = data.kind === "ok" ? data.vault : null;
+  const spur = data.kind === "ok" ? data.spur : null;
+  const graft = data.kind === "ok" ? data.graft : null;
+  // Hero: vault yang punya round aktif (Spur diutamakan); kalau tidak ada, Spur, lalu Graft.
+  const vault = (spur?.currentRound ? spur : graft?.currentRound ? graft : spur ?? graft) ?? null;
   const cur = vault?.currentRound ?? null;
-  const rounds = vault?.rounds.slice(0, HISTORY_MAX) ?? [];
+  const history = [spur, graft].flatMap((v) => (v && v.rounds.length > 0 ? [v] : []));
+  // Tombol hero: semua vault yang ada (Spur lalu Graft), termasuk yang dikonfigurasi tetapi belum diindeks.
+  const heroLinks = [spur?.symbol ?? configuredSymbol("spur"), graft?.symbol ?? configuredSymbol("graft")].filter((x): x is string => !!x);
+  const anyDemo = !!(spur?.isDemo || graft?.isDemo);
 
   return (
     <>
@@ -62,7 +112,7 @@ export default async function HarvestPage() {
           <div className="wrap relative space-y-4">
             <h1 id="harvest-title" className="font-display text-[clamp(2.6rem,6vw,4.6rem)] leading-none font-normal tracking-[-.03em]">Harvest</h1>
             <p className="max-w-[56ch] text-[1.08rem] text-bark">The garden bears fruit every week. One round, one expiry, one settlement price.</p>
-            {vault?.isDemo && <p><span className="rounded-full border border-wire px-3 py-1 text-sm text-bark">Demo data · not live prices</span></p>}
+            {anyDemo && <p><span className="rounded-full border border-wire px-3 py-1 text-sm text-bark">Demo data · not live prices</span></p>}
           </div>
         </section>
 
@@ -90,7 +140,11 @@ export default async function HarvestPage() {
                       {cur?.status === "auctioned" && "Premium is already paid. The round is waiting for expiry."}
                       {cur?.status === "open" && "The round is open. A Picker has not paid the premium yet."}
                     </p>
-                    {vault && <ButtonLink href={`/vaults/${vault.symbol}`} variant="ghost">Open {vault.symbol}</ButtonLink>}
+                    {heroLinks.length > 0 && (
+                      <div className="flex flex-wrap gap-3">
+                        {heroLinks.map((sym) => <ButtonLink key={sym} href={`/vaults/${sym}`} variant="ghost">Open {sym}</ButtonLink>)}
+                      </div>
+                    )}
                   </div>
                   {cur && <div className="md:min-w-[320px]"><RoundCountdown expiry={cur.expiry} label="Time to expiry" /></div>}
                 </div>
@@ -111,41 +165,30 @@ export default async function HarvestPage() {
                 <p className="max-w-[52ch] text-bark">Every round records its strike, expiry, notional, premium, Picker and settlement price.</p>
               </div>
               <div className="grid gap-7 md:grid-cols-2">
-                <Panel title={vault?.symbol ?? "Spur Vault"} sub="Spur Vault">
-                  {cur ? (
-                    <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
-                      {([
-                        ["Strike", usd(cur.strike)],
-                        ["Expires", `${expiryFmt.format(new Date(cur.expiry))} ET`],
-                        ["Notional", `${qtyFmt.format(cur.notional)} ${vault?.underlying ?? ""}`],
-                        ["Premium paid", cur.premiumUsdg === null ? "Not auctioned yet" : usd(cur.premiumUsdg)],
-                        ["Picker", cur.picker ? shortAddr(cur.picker) : "—"],
-                        ["Status", ROUND_STATUS[cur.status] ?? cur.status],
-                      ] as const).map(([k, v]) => (
-                        <div key={k} className="border-b border-wire/60 pb-2"><dt className="text-[.86rem] text-bark">{k}</dt><dd className="font-mono text-[1.05rem] font-medium">{v}</dd></div>
-                      ))}
-                    </dl>
-                  ) : <p className="text-bark">No round is open right now.</p>}
-                </Panel>
-                <Panel dashed title="gNVDA" sub="Graft Vault · after MVP">
-                  <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
-                    {["Strike", "Notional", "Premium paid"].map((k) => (
-                      <div key={k} className="border-b border-wire/60 pb-2"><dt className="text-[.86rem] text-bark">{k}</dt><dd className="font-mono text-[1.05rem] font-medium">—<span className="sr-only"> not live yet</span></dd></div>
-                    ))}
-                  </dl>
-                  <ButtonLink href="/vaults?kind=graft" variant="ghost" className="mt-5">Preview Grafts</ButtonLink>
-                </Panel>
+                <VaultRoundPanel kind="spur" vault={spur} fallback={configuredSymbol("spur")} />
+                <VaultRoundPanel kind="graft" vault={graft} fallback={configuredSymbol("graft")} />
               </div>
             </section>
 
             <section aria-labelledby="past-title" className="wrap pb-[72px]">
               <div className="mb-8 grid items-end gap-6 md:grid-cols-2 md:gap-12">
                 <h2 id="past-title" className={H2}>Past rounds</h2>
-                <p className="max-w-[52ch] text-bark">{vault ? `All rounds for ${vault.symbol}. ` : ""}Premium is the total paid by the Picker to the vault.</p>
+                <p className="max-w-[52ch] text-bark">Premium is the total paid by the Picker to the vault.</p>
               </div>
-              {rounds.length > 0
-                ? <><RoundHistoryTable rounds={rounds} />{vault && vault.rounds.length > rounds.length && <p className="mt-3 text-sm text-bark">Showing the latest {rounds.length} of {vault.rounds.length} rounds.</p>}</>
-                : <p className="text-bark">No rounds yet. The first Harvest will show up here.</p>}
+              {history.length > 0 ? (
+                <div className="space-y-10">
+                  {history.map((v) => {
+                    const shown = v.rounds.slice(0, HISTORY_MAX);
+                    return (
+                      <div key={v.symbol}>
+                        <h3 className="mb-3 font-display text-[1.4rem] font-[450]">{v.symbol}</h3>
+                        <RoundHistoryTable rounds={shown} />
+                        {v.rounds.length > shown.length && <p className="mt-3 text-sm text-bark">Showing the latest {shown.length} of {v.rounds.length} rounds.</p>}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : <p className="text-bark">No rounds yet. The first Harvest will show up here.</p>}
             </section>
           </>
         )}

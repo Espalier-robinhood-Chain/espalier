@@ -31,10 +31,10 @@ const products: { art: "cordon" | "spur" | "graft"; name: string; sym: string; k
   { art: "cordon", name: "Cordon", sym: "cMAG7", kind: "Stock basket", href: "/cordons", cta: "Explore Cordons",
     text: "One token, one basket. cMAG7 holds seven large companies at equal weight, pruned on schedule.",
     trade: "You keep the basket’s ups and its downs." },
-  { art: "spur", name: "Spur Vault", sym: "sNVDA", kind: "Covered-call vault", href: "/vaults", cta: "Explore Spurs",
+  { art: "spur", name: "Spur Vault", sym: "sNVDA", kind: "Covered-call vault", href: "/vaults?kind=spur", cta: "Explore Spurs",
     text: "Deposit a Stock Token. Pickers pay premium up front for the upside above a strike. You collect it each round.",
     trade: "Spurs cap your upside. That is the trade." },
-  { art: "graft", name: "Graft Vault", sym: "gNVDA", kind: "Cash-secured put vault", href: "/vaults", cta: "Preview Grafts", badge: "After MVP",
+  { art: "graft", name: "Graft Vault", sym: "gNVDA", kind: "Cash-secured put vault", href: "/vaults?kind=graft", cta: "Explore Grafts",
     text: "Deposit USDG. Get paid premium while you wait to buy a stock at a lower price.",
     trade: "If the price ends below the strike, the vault pays out the shortfall." },
 ];
@@ -54,8 +54,8 @@ const paths = [
 
 const today = [
   { kind: "Cordon", sym: "cMAG7", href: "/cordons", cta: "View Cordons", rows: [["Holds", "7 stocks"], ["Weights", "Equal"], ["Pays premium", "No"]] },
-  { kind: "Spur Vault", sym: "sNVDA", href: "/vaults", cta: "View Spurs", rows: [["Deposit", "NVDA"], ["Sells", "Upside above a strike"], ["Pays", "Premium in USDG"]] },
-  { kind: "Graft Vault", sym: "gNVDA", href: "/vaults", cta: "Preview Grafts", dashed: true, rows: [["Collateral", "USDG"], ["Strike", "Below today’s price"], ["Settlement", "Cash"]] },
+  { kind: "Spur Vault", sym: "sNVDA", href: "/vaults?kind=spur", cta: "View Spurs", rows: [["Deposit", "NVDA"], ["Sells", "Upside above a strike"], ["Pays", "Premium in USDG"]] },
+  { kind: "Graft Vault", sym: "gNVDA", href: "/vaults?kind=graft", cta: "View Grafts", rows: [["Collateral", "USDG"], ["Strike", "Below today’s price"], ["Settlement", "Cash"]] },
 ] as const;
 
 // Pohon contoh untuk teaser The Wall (ilustratif, bukan data pengguna).
@@ -90,8 +90,8 @@ export default function Landing() {
               </div>
               <ul aria-label="Products" className="mt-6 flex flex-wrap gap-2 font-mono text-[.82rem]">
                 <li><Link href="/cordons" className="rounded-full border border-wire px-3 py-1 hover:border-bark">cMAG7</Link></li>
-                <li><Link href="/vaults" className="rounded-full border border-wire px-3 py-1 hover:border-bark">sNVDA</Link></li>
-                <li><Link href="/vaults" className="rounded-full border border-dashed border-wire px-3 py-1 text-bark hover:border-bark">gNVDA · after MVP</Link></li>
+                <li><Link href="/vaults?kind=spur" className="rounded-full border border-wire px-3 py-1 hover:border-bark">sNVDA</Link></li>
+                <li><Link href="/vaults?kind=graft" className="rounded-full border border-wire px-3 py-1 hover:border-bark">gNVDA</Link></li>
               </ul>
               <DemoCountdown className="mt-8" />
             </div>

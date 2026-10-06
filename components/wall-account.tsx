@@ -26,7 +26,12 @@ function describe(e: unknown): string {
   console.error(e);
   const msg = e instanceof Error ? `${e.name} ${e.message}` : "";
   if (/reject|denied|cancel/i.test(msg)) return "Signing was cancelled. Nothing was sent.";
-  return "Sign-in did not work. Try again in a moment.";
+  // Galat dari Supabase Auth (AuthApiError) membawa `code`/`status`. Dua penyebab pengaturan yang paling umum diberi pesan sendiri.
+  const code = typeof e === "object" && e !== null && "code" in e && typeof e.code === "string" ? e.code : "";
+  const detail = `${code} ${msg}`;
+  if (/web3_provider_disabled|web3.*disabled|provider is disabled/i.test(detail)) return "Wallet sign-in is not switched on for this site yet.";
+  if (/redirect|invalid (uri|domain)|\bdomain\b/i.test(detail)) return "This site's address is not allowed for wallet sign-in yet.";
+  return `Sign-in did not work${code ? ` (${code})` : ""}. Try again in a moment.`;
 }
 
 function Connected({ signedInAs, isPrivate }: Props) {
