@@ -1,6 +1,6 @@
 "use client";
 import { useId, useState } from "react";
-import { graftLive, spurLive, tradeLive } from "@/lib/web3/env";
+import { cordonTargetFor, graftLive, spurLive, tradeLive, web3Env } from "@/lib/web3/env";
 import { AmountField, Radio, Segmented, note } from "./trade-fields";
 import { LiveDepositWithdrawPanel } from "./spur-live";
 import { LiveMintRedeemPanel } from "./trade-live";
@@ -63,5 +63,6 @@ export function DepositWithdrawPanel(p: { symbol: string; asset: "stock" | "USDG
 
 // Sungguhan bila wallet aktif dan vault untuk `symbol` dikonfigurasi (NEXT_PUBLIC_CORDON_VAULT_*); selain itu simulasi seperti sebelumnya.
 export function MintRedeemPanel(p: { symbol: string; marketOpen: boolean; nextOpen?: string }) {
-  return tradeLive(p.symbol) ? <LiveMintRedeemPanel {...p} /> : <DemoMintRedeemPanel {...p} />;
+  const target = tradeLive(p.symbol) ? cordonTargetFor(web3Env, p.symbol) : undefined;
+  return target ? <LiveMintRedeemPanel {...p} target={target} /> : <DemoMintRedeemPanel {...p} />;
 }

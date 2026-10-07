@@ -10,12 +10,19 @@ const log = (msg: string, extra?: unknown) => console.log(`${new Date().toISOStr
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const cfg = loadConfig(process.env);
-const chain = await createViemChain(cfg.rpcUrl, cfg.vault, cfg.chainId);
-const store = createSupabaseStore(cfg.supabaseUrl, cfg.serviceKey, `cordon:${cfg.chainId}:${cfg.vault.toLowerCase()}`);
-const sync: SyncConfig = { startBlock: cfg.startBlock, confirmations: cfg.confirmations, logChunk: cfg.logChunk, balanceBatch: cfg.balanceBatch };
 
-const boot = await bootstrap(chain, store);
-log(`indexer siap: ${boot.meta.symbol} @ ${boot.meta.address} (chain ${cfg.chainId}), ${boot.meta.components.length} komponen`);
+// Cordon: yang utama (cMAG7) ditambah EXTRA_CORDONS (mis. cCHIP). Masing-masing jalur sendiri (klien, kursor, snapshot NAV),
+// jadi galat di satu Cordon tidak menghentikan yang lain.
+type CordonPipe = { chain: Awaited<ReturnType<typeof createViemChain>>; store: ReturnType<typeof createSupabaseStore>; sync: SyncConfig; boot: Awaited<ReturnType<typeof bootstrap>>; lastSnapshot: number };
+const cordons: CordonPipe[] = [];
+for (const c of [{ vault: cfg.vault, startBlock: cfg.startBlock }, ...cfg.extraCordons]) {
+  const cChain = await createViemChain(cfg.rpcUrl, c.vault, cfg.chainId);
+  const cStore = createSupabaseStore(cfg.supabaseUrl, cfg.serviceKey, `cordon:${cfg.chainId}:${c.vault.toLowerCase()}`);
+  const cSync: SyncConfig = { startBlock: c.startBlock, confirmations: cfg.confirmations, logChunk: cfg.logChunk, balanceBatch: cfg.balanceBatch };
+  const cBoot = await bootstrap(cChain, cStore);
+  cordons.push({ chain: cChain, store: cStore, sync: cSync, boot: cBoot, lastSnapshot: 0 });
+  log(`indexer siap: ${cBoot.meta.symbol} @ ${cBoot.meta.address} (chain ${cfg.chainId}), ${cBoot.meta.components.length} komponen`);
+}
 
 // Spur dan Graft (opsional): masing-masing jalur sendiri dengan kursor + snapshot sendiri, jadi galat di satu jalur
 // tidak menghentikan Cordon atau vault lain. Graft memakai kode yang sama (GraftVault mencerminkan SpurVault).
@@ -33,22 +40,23 @@ for (const [name, v] of [["spur", cfg.spur], ["graft", cfg.graft]] as const) {
 let stop = false;
 for (const s of ["SIGINT", "SIGTERM"] as const) process.on(s, () => { stop = true; });
 
-let lastSnapshot = 0;
 let failures = 0;
 while (!stop) {
   let failed = false;
   const attempt = async (what: string, fn: () => Promise<void>) => {
     try { await fn(); } catch (e) { failed = true; log(`galat ${what} (percobaan ${failures + 1}):`, e instanceof Error ? e.message : e); }
   };
-  await attempt("cordon", async () => {
-    const r = await syncOnce(chain, store, sync, boot);
-    if (r) log(`sinkron blok ${r.from}..${r.to}: ${r.touched} akun berubah, NAV ${r.navWritten ? "ditulis" : "dilewati (harga tidak valid)"}`);
-    if (Date.now() - lastSnapshot >= cfg.navEveryMs) {
-      const ok = await snapshotNav(chain, store, sync, boot);
-      lastSnapshot = Date.now();
-      if (!ok) log("snapshot NAV dilewati (harga komponen tidak valid atau belum ada blok aman)");
-    }
-  });
+  for (const c of cordons) {
+    await attempt(c.boot.meta.symbol, async () => {
+      const r = await syncOnce(c.chain, c.store, c.sync, c.boot);
+      if (r) log(`${c.boot.meta.symbol} sinkron blok ${r.from}..${r.to}: ${r.touched} akun berubah, NAV ${r.navWritten ? "ditulis" : "dilewati (harga tidak valid)"}`);
+      if (Date.now() - c.lastSnapshot >= cfg.navEveryMs) {
+        const ok = await snapshotNav(c.chain, c.store, c.sync, c.boot);
+        c.lastSnapshot = Date.now();
+        if (!ok) log(`snapshot NAV ${c.boot.meta.symbol} dilewati (harga komponen tidak valid atau belum ada blok aman)`);
+      }
+    });
+  }
   for (const v of vaults) {
     await attempt(v.name, async () => {
       const r = await syncSpurOnce(v.chain, v.store, v.sync, v.boot);

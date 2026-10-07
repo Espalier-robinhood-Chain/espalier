@@ -6,7 +6,7 @@ import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { erc20Abi, type Address, type Hash, type PublicClient } from "viem";
 import { useAccount, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
 import { robinhoodMainnet, robinhoodTestnet } from "@/lib/web3/chains";
-import { web3Env } from "@/lib/web3/env";
+import type { VaultTarget } from "@/lib/web3/env";
 import { cordonErrorMessage, formatAmount, isUserRejection, parseAmount, pendingApprovals, SLIPPAGE_OPTIONS, type SlippageLabel } from "@/lib/web3/trade";
 import { Button, Panel } from "./ui";
 import { AmountField, Radio, Segmented, note } from "./trade-fields";
@@ -18,8 +18,8 @@ type Status = { kind: "idle" } | { kind: "busy"; text: string } | { kind: "ok"; 
 const explorerOf = (chainId: number) =>
   [robinhoodMainnet, robinhoodTestnet].find((c) => c?.id === chainId)?.blockExplorers?.default.url;
 
-export function LiveMintRedeemPanel({ symbol, marketOpen, nextOpen }: { symbol: string; marketOpen: boolean; nextOpen?: string }) {
-  const target = web3Env.vault!; // dijamin oleh tradeLive()
+export function LiveMintRedeemPanel({ symbol, target, marketOpen, nextOpen }: { symbol: string; target: VaultTarget; marketOpen: boolean; nextOpen?: string }) {
+  // `target` = vault untuk `symbol` (cMAG7 atau cCHIP), dipilih oleh MintRedeemPanel lewat cordonTargetFor().
   const { address: account, chainId: walletChain, isConnected } = useAccount();
   const client = usePublicClient({ chainId: target.chainId }) as unknown as PublicClient | undefined;
   const { switchChainAsync } = useSwitchChain();

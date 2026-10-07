@@ -144,3 +144,17 @@ test("loadConfig: default masuk akal dan semua wajib diperiksa", () => {
   assert.throws(() => loadConfig({ ...ENV, LOG_CHUNK: "0" }), /LOG_CHUNK/);
   assert.throws(() => loadConfig({ ...ENV, SUPABASE_URL: "p.supabase.co" }), /http/);
 });
+
+// ---- EXTRA_CORDONS (cCHIP) ----
+test("loadConfig: EXTRA_CORDONS kosong = tanpa Cordon tambahan; berisi = daftar alamat@blok", () => {
+  assert.deepEqual(loadConfig(ENV).extraCordons, []);
+  const B = "0x" + "bb".repeat(20), C = "0x" + "cc".repeat(20);
+  const c = loadConfig({ ...ENV, EXTRA_CORDONS: ` ${B}@130100000 , ${C}@7 ` });
+  assert.deepEqual(c.extraCordons.map((x) => [x.vault, x.startBlock]), [[B, 130100000n], [C, 7n]]);
+});
+test("loadConfig: EXTRA_CORDONS salah bentuk, alamat nol, blok bukan angka, atau duplikat = gagal keras", () => {
+  const B = "0x" + "bb".repeat(20);
+  for (const bad of [B, `${B}@`, `${B}@abc`, `0x123@5`, `0x${"0".repeat(40)}@5`, `${B}@5,${B}@6`, `${V}@5`, `${B}@5@6`]) {
+    assert.throws(() => loadConfig({ ...ENV, EXTRA_CORDONS: bad }), /EXTRA_CORDONS/, bad);
+  }
+});
