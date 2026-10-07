@@ -47,6 +47,9 @@ export default async function CordonsPage() {
   const now = new Date(), next = nextChange(now);
   const nextLabel = next ? `until ${sessionFmt.format(new Date(next))} ET` : undefined;
   const anyDemo = data.kind === "ok" && data.cordons.some((c) => c.isDemo);
+  // Basket yang sudah ada di database (mis. cCHIP setelah indexer menulisnya) pindah ke "In the garden", bukan lagi "Not yet planted".
+  const live = new Set(data.kind === "ok" ? data.cordons.map((c) => c.symbol) : []);
+  const stillPlanned = planned.filter((p) => !live.has(p.symbol));
 
   return (
     <>
@@ -104,7 +107,7 @@ export default async function CordonsPage() {
           <h2 id="planned-title" className="font-display text-2xl">Not yet planted</h2>
           <p className="mt-2 max-w-prose text-bark">Planned baskets. Not live, and not available to mint.</p>
           <ul className="mt-6 grid gap-4">
-            {planned.map((p) => (
+            {stillPlanned.map((p) => (
               <li key={p.symbol} className="grid items-center gap-6 rounded-[20px] border border-dashed border-wire px-[26px] py-6 md:grid-cols-[minmax(150px,1.1fr)_2fr_auto]">
                 <div>
                   <h3 className="font-display text-[2rem] leading-none font-[450] tracking-[-.02em]">{p.symbol}</h3>

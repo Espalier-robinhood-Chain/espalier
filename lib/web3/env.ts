@@ -11,7 +11,7 @@ export function resolveNetworkMode(raw?: string): NetworkMode | undefined {
   return v === "mainnet" || v === "testnet" ? v : undefined;
 }
 
-/** Vault yang panel mint/redeem-nya hidup (satu CordonVault per deployment). */
+/** Vault yang panel mint/redeem-nya hidup (satu env per CordonVault: cMAG7 dan cCHIP). */
 export type VaultTarget = { address: `0x${string}`; chainId: number; symbol: string };
 
 /** SpurVault yang panel deposit/withdraw-nya hidup (satu per deployment, mis. sNVDA). */
@@ -27,8 +27,10 @@ export type Web3Env = {
   mainnetRpc: string;
   testnetRpc?: string;
   siteUrl: string;
-  /** undefined = panel tetap mode demo (tanpa transaksi). */
+  /** undefined = panel tetap mode demo (tanpa transaksi). Vault pertama (cMAG7); sama dengan `vaults[0]`. */
   vault?: VaultTarget;
+  /** Semua CordonVault yang panel mint/redeem-nya hidup (cMAG7 lewat NEXT_PUBLIC_CORDON_VAULT_*, cCHIP lewat NEXT_PUBLIC_CCHIP_VAULT_*). */
+  vaults?: VaultTarget[];
   /** undefined = panel deposit/withdraw Spur tetap mode demo (tanpa transaksi). */
   spur?: SpurTarget;
   /** undefined = panel deposit/withdraw Graft tetap mode demo (tanpa transaksi). */
@@ -43,13 +45,20 @@ const clean = (v?: string) => v?.trim() || undefined;
  * Chain default = testnet 46630, karena tahap 1 di alur kerja adalah deploy testnet.
  */
 export function resolveVaultTarget(e: Record<string, string | undefined>): VaultTarget | undefined {
-  const address = clean(e.NEXT_PUBLIC_CORDON_VAULT_ADDRESS);
+  return resolveCordonTarget(e, "CORDON", "cMAG7");
+}
+
+/** Cordon kedua: cCHIP (semikonduktor). Aturan sama dengan `resolveVaultTarget`, env berawalan NEXT_PUBLIC_CCHIP_VAULT_*. */
+export const resolveCchipTarget = (e: Record<string, string | undefined>): VaultTarget | undefined => resolveCordonTarget(e, "CCHIP", "cCHIP");
+
+function resolveCordonTarget(e: Record<string, string | undefined>, p: "CORDON" | "CCHIP", defaultSymbol: string): VaultTarget | undefined {
+  const address = clean(e[`NEXT_PUBLIC_${p}_VAULT_ADDRESS`]);
   if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address) || /^0x0{40}$/.test(address)) return undefined;
-  const rawChain = clean(e.NEXT_PUBLIC_CORDON_VAULT_CHAIN_ID) ?? "46630";
+  const rawChain = clean(e[`NEXT_PUBLIC_${p}_VAULT_CHAIN_ID`]) ?? "46630";
   if (!/^\d+$/.test(rawChain)) return undefined;
   const chainId = Number(rawChain);
   if (!Number.isSafeInteger(chainId) || chainId <= 0) return undefined;
-  return { address: address as `0x${string}`, chainId, symbol: clean(e.NEXT_PUBLIC_CORDON_VAULT_SYMBOL) ?? "cMAG7" };
+  return { address: address as `0x${string}`, chainId, symbol: clean(e[`NEXT_PUBLIC_${p}_VAULT_SYMBOL`]) ?? defaultSymbol };
 }
 
 /**
@@ -76,6 +85,8 @@ export const resolveGraftTarget = (e: Record<string, string | undefined>): Graft
 
 export function resolveWeb3Env(e: Record<string, string | undefined>): Web3Env {
   const vault = resolveVaultTarget(e);
+  const cchip = resolveCchipTarget(e);
+  const vaults = [vault, cchip].filter((v): v is VaultTarget => v !== undefined);
   const spur = resolveSpurTarget(e);
   const graft = resolveGraftTarget(e);
   const mode = resolveNetworkMode(e.NEXT_MODE);
@@ -86,6 +97,7 @@ export function resolveWeb3Env(e: Record<string, string | undefined>): Web3Env {
     testnetRpc: clean(e.NEXT_PUBLIC_RH_RPC_TESTNET),
     siteUrl: clean(e.NEXT_PUBLIC_SITE_URL) ?? "http://localhost:3000",
     ...(vault ? { vault } : {}),
+    ...(vaults.length ? { vaults } : {}),
     ...(spur ? { spur } : {}),
     ...(graft ? { graft } : {}),
   };
@@ -102,6 +114,9 @@ export const web3Env = resolveWeb3Env({
   NEXT_PUBLIC_CORDON_VAULT_ADDRESS: process.env.NEXT_PUBLIC_CORDON_VAULT_ADDRESS,
   NEXT_PUBLIC_CORDON_VAULT_CHAIN_ID: process.env.NEXT_PUBLIC_CORDON_VAULT_CHAIN_ID,
   NEXT_PUBLIC_CORDON_VAULT_SYMBOL: process.env.NEXT_PUBLIC_CORDON_VAULT_SYMBOL,
+  NEXT_PUBLIC_CCHIP_VAULT_ADDRESS: process.env.NEXT_PUBLIC_CCHIP_VAULT_ADDRESS,
+  NEXT_PUBLIC_CCHIP_VAULT_CHAIN_ID: process.env.NEXT_PUBLIC_CCHIP_VAULT_CHAIN_ID,
+  NEXT_PUBLIC_CCHIP_VAULT_SYMBOL: process.env.NEXT_PUBLIC_CCHIP_VAULT_SYMBOL,
   NEXT_PUBLIC_SPUR_VAULT_ADDRESS: process.env.NEXT_PUBLIC_SPUR_VAULT_ADDRESS,
   NEXT_PUBLIC_SPUR_VAULT_CHAIN_ID: process.env.NEXT_PUBLIC_SPUR_VAULT_CHAIN_ID,
   NEXT_PUBLIC_SPUR_VAULT_SYMBOL: process.env.NEXT_PUBLIC_SPUR_VAULT_SYMBOL,
@@ -124,9 +139,13 @@ export function isWeb3Enabled(env: Web3Env): boolean {
  * dan chain vault sama dengan chain NEXT_MODE (vault testnet tidak boleh menerima transaksi di mode mainnet, dan sebaliknya).
  */
 export function isTradeLive(env: Web3Env, symbol: string): boolean {
-  if (!isWeb3Enabled(env) || !env.mode || !env.vault) return false;
-  return env.vault.symbol === symbol && env.vault.chainId === MODE_CHAIN_ID[env.mode];
+  if (!isWeb3Enabled(env) || !env.mode) return false;
+  const mode = env.mode;
+  return (env.vaults ?? []).some((v) => v.symbol === symbol && v.chainId === MODE_CHAIN_ID[mode]);
 }
+
+/** CordonVault yang dikonfigurasi untuk `symbol` (dipakai panel live). undefined bila tidak ada. */
+export const cordonTargetFor = (env: Web3Env, symbol: string): VaultTarget | undefined => (env.vaults ?? []).find((v) => v.symbol === symbol);
 
 /** Panel deposit/withdraw Spur sungguhan: aturan yang sama dengan `isTradeLive`, untuk SpurVault. */
 export function isSpurLive(env: Web3Env, symbol: string): boolean {

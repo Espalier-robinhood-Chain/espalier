@@ -11,6 +11,8 @@ export interface IndexerConfig {
   balanceBatch: number;
   pollMs: number;
   navEveryMs: number;
+  /** Cordon tambahan (opsional, mis. cCHIP): EXTRA_CORDONS="0xalamat@blokDeploy,0xalamat@blokDeploy". Kosong = tidak ada. */
+  extraCordons: { vault: `0x${string}`; startBlock: bigint }[];
   /** Spur Vault (opsional): null bila SPUR_VAULT_ADDRESS kosong. */
   spur: { vault: `0x${string}`; startBlock: bigint; symbol: string | null } | null;
   /** Graft Vault (opsional): null bila GRAFT_VAULT_ADDRESS kosong. Bentuknya sama dengan `spur`. */
@@ -37,6 +39,7 @@ export function loadConfig(e: Record<string, string | undefined>): IndexerConfig
   const supabaseUrl = need(e, "SUPABASE_URL");
   if (!/^https?:\/\//.test(supabaseUrl)) throw new Error("env SUPABASE_URL harus diawali http(s)://");
   return {
+    extraCordons: loadExtraCordons(e, vault),
     spur: loadSpur(e),
     graft: loadGraft(e),
     rpcUrl: need(e, "INDEXER_RPC_URL"),
@@ -66,3 +69,23 @@ function loadVault(e: Record<string, string | undefined>, p: "SPUR" | "GRAFT"): 
 }
 const loadSpur = (e: Record<string, string | undefined>) => loadVault(e, "SPUR");
 const loadGraft = (e: Record<string, string | undefined>) => loadVault(e, "GRAFT");
+
+/**
+ * EXTRA_CORDONS: daftar "alamat@blokDeploy" dipisah koma. Tiap Cordon punya kursor dan snapshot NAV sendiri (kunci
+ * `cordon:<chain>:<alamat>`), jadi menambah cCHIP tidak menyentuh data cMAG7. Gagal keras bila salah bentuk, duplikat,
+ * atau sama dengan CORDON_VAULT_ADDRESS.
+ */
+function loadExtraCordons(e: Record<string, string | undefined>, primary: string): IndexerConfig["extraCordons"] {
+  const raw = e.EXTRA_CORDONS?.trim();
+  if (!raw) return [];
+  const seen = new Set<string>([primary.toLowerCase()]);
+  return raw.split(",").map((part) => part.trim()).filter(Boolean).map((part) => {
+    const [addr, block, ...rest] = part.split("@");
+    if (rest.length || !addr || !block) throw new Error(`env EXTRA_CORDONS: "${part}" harus berbentuk 0xalamat@blokDeploy`);
+    if (!/^0x[0-9a-fA-F]{40}$/.test(addr) || /^0x0{40}$/.test(addr)) throw new Error(`env EXTRA_CORDONS: alamat tidak valid (${addr})`);
+    if (!/^\d+$/.test(block)) throw new Error(`env EXTRA_CORDONS: blok deploy untuk ${addr} harus bilangan bulat >= 0`);
+    if (seen.has(addr.toLowerCase())) throw new Error(`env EXTRA_CORDONS: alamat ganda atau sama dengan CORDON_VAULT_ADDRESS (${addr})`);
+    seen.add(addr.toLowerCase());
+    return { vault: addr as `0x${string}`, startBlock: BigInt(block) };
+  });
+}

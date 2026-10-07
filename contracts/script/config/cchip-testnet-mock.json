@@ -1,0 +1,72 @@
+{
+  "_note": "Cordon cCHIP (semikonduktor) di Robinhood Chain Testnet 46630, memakai OracleRouter yang SUDAH ter-deploy (deploy B1). NVDA = token mock B1 yang sama (dipakai ulang). AMD, AVGO, TSM = token + feed mock baru. Pengirim harus ADMIN OracleRouter (espalier-owner).",
+  "name": "cchip-testnet-mock",
+  "chainId": 46630,
+  "router": "0x7918Be51162b742DE19d666B88AB5Af134B6Cd0e",
+  "owner": "0xE0bf53F10B12bcd19A979C698809750f34512f47",
+  "cordon": {
+    "name": "Espalier Cordon Semiconductors",
+    "symbol": "cCHIP"
+  },
+  "fees": {
+    "_note": "Sama dengan cMAG7 (10/10/50 bps). Batas hardcode kontrak 100/100/200.",
+    "mintBps": 10,
+    "redeemBps": 10,
+    "managementBps": 50,
+    "recipient": "0xE0bf53F10B12bcd19A979C698809750f34512f47"
+  },
+  "seed": {
+    "_note": "Jumlah mentah per aset (18 desimal), urutan sama dengan assets: NVDA 10, AMD 15, AVGO 8, TSM 12 token. Nilainya kira-kira seimbang di harga mock (NVDA 250, AMD 160, AVGO 310, TSM 200). shares minimal 1e18.",
+    "enabled": true,
+    "to": "0xE0bf53F10B12bcd19A979C698809750f34512f47",
+    "shares": "1000000000000000000000",
+    "amounts": [
+      "10000000000000000000",
+      "15000000000000000000",
+      "8000000000000000000",
+      "12000000000000000000"
+    ]
+  },
+  "assets": [
+    {
+      "symbol": "NVDA",
+      "token": "0xd7F0Eccb089280156c454fe3AD9aF924c40f6BD2",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": false,
+      "targetBps": 2500,
+      "mockPriceE8": 0
+    },
+    {
+      "symbol": "AMD",
+      "token": "0x0000000000000000000000000000000000000000",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": false,
+      "targetBps": 2500,
+      "mockPriceE8": 16000000000
+    },
+    {
+      "symbol": "AVGO",
+      "token": "0x0000000000000000000000000000000000000000",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": false,
+      "targetBps": 2500,
+      "mockPriceE8": 31000000000
+    },
+    {
+      "symbol": "TSM",
+      "token": "0x0000000000000000000000000000000000000000",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": false,
+      "targetBps": 2500,
+      "mockPriceE8": 20000000000
+    }
+  ]
+}

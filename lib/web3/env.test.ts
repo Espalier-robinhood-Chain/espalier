@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { MAINNET_PUBLIC_RPC, isGraftLive, isSpurLive, isTradeLive, isWeb3Enabled, resolveGraftTarget, resolveNetworkMode, resolveSpurTarget, resolveWeb3Env } from "./env.ts";
+import { MAINNET_PUBLIC_RPC, cordonTargetFor, isGraftLive, isSpurLive, isTradeLive, isWeb3Enabled, resolveCchipTarget, resolveGraftTarget, resolveNetworkMode, resolveSpurTarget, resolveWeb3Env } from "./env.ts";
 
 test("env kosong: wallet mati, mainnet jatuh ke RPC publik, testnet tidak ditawarkan", () => {
   const e = resolveWeb3Env({});
@@ -141,4 +141,27 @@ test("graft live: butuh wallet aktif, simbol sama, dan chain vault sama dengan N
   assert.equal(isGraftLive(resolveWeb3Env(LIVE), "gNVDA"), false, "tanpa alamat graft");
   assert.equal(isSpurLive(resolveWeb3Env({ ...LIVE, ...GRAFT }), "sNVDA"), false);
   assert.equal(isSpurLive(resolveWeb3Env({ ...LIVE, ...GRAFT }), "gNVDA"), false);
+});
+
+// ---- cCHIP (Cordon kedua) ----
+const CCHIP = { NEXT_PUBLIC_CCHIP_VAULT_ADDRESS: ADDR };
+test("cCHIP: alamat salah bentuk atau nol = tidak diisi; default simbol cCHIP, chain 46630", () => {
+  assert.deepEqual(resolveCchipTarget(CCHIP), { address: ADDR, chainId: 46630, symbol: "cCHIP" });
+  for (const a of ["", "0x123", "0x" + "0".repeat(40), "zz" + ADDR.slice(2)]) assert.equal(resolveCchipTarget({ NEXT_PUBLIC_CCHIP_VAULT_ADDRESS: a }), undefined, a);
+});
+test("cCHIP: env cMAG7 dan cCHIP hidup berdampingan, tiap simbol hanya mengarah ke vault-nya", () => {
+  const B = "0x" + "bb".repeat(20);
+  const env = resolveWeb3Env({ NEXT_MODE: "testnet", NEXT_PUBLIC_REOWN_PROJECT_ID: "p", NEXT_PUBLIC_RH_RPC_TESTNET: "http://r", NEXT_PUBLIC_CORDON_VAULT_ADDRESS: ADDR, NEXT_PUBLIC_CCHIP_VAULT_ADDRESS: B });
+  assert.equal(env.vaults?.length, 2);
+  assert.equal(env.vault?.symbol, "cMAG7");
+  assert.equal(isTradeLive(env, "cMAG7"), true);
+  assert.equal(isTradeLive(env, "cCHIP"), true);
+  assert.equal(isTradeLive(env, "cVOLT"), false);
+  assert.equal(cordonTargetFor(env, "cCHIP")?.address, B);
+  assert.equal(cordonTargetFor(env, "cMAG7")?.address, ADDR);
+});
+test("cCHIP: tanpa env cCHIP, cMAG7 tetap seperti semula", () => {
+  const env = resolveWeb3Env({ NEXT_PUBLIC_CORDON_VAULT_ADDRESS: ADDR });
+  assert.equal(env.vaults?.length, 1);
+  assert.equal(cordonTargetFor(env, "cCHIP"), undefined);
 });
