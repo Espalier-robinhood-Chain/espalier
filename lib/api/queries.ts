@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createPublicClient } from "@/lib/supabase/public";
 import { changePct, computeStreak, latestHarvest, realizedApy, roundYield, withWeights } from "./derive";
+import { liveCurrentRound } from "./live-round";
 
 type Cordon = { id: string; address: string; symbol: string; name: string; is_demo: boolean };
 type Vault = { id: string; address: string; kind: "spur" | "graft"; underlying: string; symbol: string; is_demo: boolean };
@@ -73,9 +74,11 @@ export async function listVaults() {
   const db = createPublicClient();
   const vaults = await rows<Vault>(db.from("vaults").select("id,address,kind,underlying,symbol,is_demo").order("symbol"));
   const rounds = await rows<Round>(db.from("rounds").select(ROUND_COLS).order("round_no", { ascending: false }));
-  return vaults.map((v) => {
+  // Round berjalan dibaca langsung dari kontrak (tanpa menunggu indexer). undefined = tidak diketahui -> pakai database.
+  const live = await Promise.all(vaults.map((v) => liveCurrentRound(v)));
+  return vaults.map((v, i) => {
     const mine = rounds.filter((r) => r.vault_id === v.id);
-    const cur = mine.find((r) => r.status === "open" || r.status === "auctioned");
+    const cur = live[i] === undefined ? mine.find((r) => r.status === "open" || r.status === "auctioned") : live[i];
     return { symbol: v.symbol, kind: v.kind, underlying: v.underlying, address: v.address, isDemo: v.is_demo,
       realizedApy: realizedApy(mine, v.kind), currentRound: cur ? { no: cur.round_no, strike: Number(cur.strike), expiry: cur.expiry, status: cur.status } : null };
   });
@@ -99,7 +102,10 @@ export async function getVault(symbol: string) {
   const v = await vaultBy(db, symbol);
   if (!v) return null;
   const rs = await roundsOf(db, v.id);
-  const cur = rs.find((r) => r.status === "open" || r.status === "auctioned");
+  const lv = await liveCurrentRound(v); // round berjalan dari kontrak; undefined = tidak diketahui -> pakai database
+  const cur = lv === undefined ? rs.find((r) => r.status === "open" || r.status === "auctioned") : lv;
+  // Round yang baru dibuka belum tentu sudah ada di database: tampilkan di riwayat supaya konsisten dengan kartu.
+  const shown = lv && !rs.some((r) => r.round_no === lv.round_no) ? [lv, ...rs] : rs;
   const lastSettled = rs.find((r) => r.status === "settled" && roundYield(r, v.kind) !== null);
   const own = cur ? roundYield(cur, v.kind) : null, last = lastSettled ? roundYield(lastSettled, v.kind) : null;
   // Premium mingguan (% dari basis) untuk UpsideSimulator: premium round aktif jika sudah dilelang, kalau belum, round settled terakhir.
@@ -109,7 +115,7 @@ export async function getVault(symbol: string) {
     symbol: v.symbol, kind: v.kind, underlying: v.underlying, address: v.address, isDemo: v.is_demo,
     realizedApy: realizedApy(rs, v.kind), settledRounds: rs.filter((r) => r.status === "settled").length,
     currentRound: cur ? { ...roundOut(cur), spotStart: cur.spot_start === null ? null : Number(cur.spot_start) } : null,
-    premiumHint, rounds: rs.map(roundOut),
+    premiumHint, rounds: shown.map(roundOut),
   };
 }
 // `db` = klien milik penonton (cookie sesi) bila ada; RLS (migrasi 0004) hanya mengembalikan posisi dan Harvest
