@@ -36,6 +36,8 @@ body {
   transition: background-color 0.4s var(--ease), color 0.4s var(--ease);
 }
 :focus-visible { outline: 2px solid var(--leaf); outline-offset: 3px; border-radius: 4px; }
+/* Input di dalam kolom berborder: ring fokus ada di pembungkus, jadi input sendiri tidak boleh menggambar outline (kalau tidak, border jadi dobel). */
+.field-input:focus-visible { outline: none; border-radius: 0; }
 
 @layer components {
   .wrap { width: min(1180px, 100% - 40px); margin-inline: auto; }
@@ -105,6 +107,14 @@ input[type="range"].range-fruit::-moz-range-thumb { width: 18px; height: 18px; b
     .js .grow-line-h { transform: scaleX(0); transform-origin: left; }
     .js .grown .grow-line-h { transform: none; }
   }
+  /* Teks muncul perlahan di halaman Docs: tiap anak langsung section naik tipis sambil memudar, bergantian. */
+  .js .doc-sec > *, .js .doc-sec .stagger > * { opacity: 0; transform: translateY(14px); transition: opacity 0.9s ease, transform 0.9s var(--ease); }
+  .js .doc-sec.grown > *, .js .doc-sec.grown .stagger > * { opacity: 1; transform: none; }
+  .js .doc-sec > :nth-child(2) { transition-delay: 0.12s; } .js .doc-sec > :nth-child(3) { transition-delay: 0.24s; }
+  .js .doc-sec > :nth-child(4) { transition-delay: 0.36s; } .js .doc-sec > :nth-child(n+5) { transition-delay: 0.48s; }
+  .js .doc-sec .stagger > :nth-child(1) { transition-delay: 0.2s; } .js .doc-sec .stagger > :nth-child(2) { transition-delay: 0.27s; }
+  .js .doc-sec .stagger > :nth-child(3) { transition-delay: 0.34s; } .js .doc-sec .stagger > :nth-child(4) { transition-delay: 0.41s; }
+  .js .doc-sec .stagger > :nth-child(5) { transition-delay: 0.48s; } .js .doc-sec .stagger > :nth-child(n+6) { transition-delay: 0.55s; }
 }
 
 /* ---------- Kartu miring dan kilau (data-tilt) ---------- */
