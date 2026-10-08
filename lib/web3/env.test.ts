@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { MAINNET_PUBLIC_RPC, cordonTargetFor, isGraftLive, isSpurLive, isTradeLive, isWeb3Enabled, resolveCchipTarget, resolveGraftTarget, resolveNetworkMode, resolveSpurTarget, resolveWeb3Env } from "./env.ts";
+import { MAINNET_PUBLIC_RPC, cordonTargetFor, isGraftLive, isSpurLive, isTradeLive, isWeb3Enabled, resolveCchipTarget, resolveCvoltTarget, resolveGraftTarget, resolveNetworkMode, resolveSpurTarget, resolveWeb3Env } from "./env.ts";
 
 test("env kosong: wallet mati, mainnet jatuh ke RPC publik, testnet tidak ditawarkan", () => {
   const e = resolveWeb3Env({});
@@ -164,4 +164,24 @@ test("cCHIP: tanpa env cCHIP, cMAG7 tetap seperti semula", () => {
   const env = resolveWeb3Env({ NEXT_PUBLIC_CORDON_VAULT_ADDRESS: ADDR });
   assert.equal(env.vaults?.length, 1);
   assert.equal(cordonTargetFor(env, "cCHIP"), undefined);
+});
+
+// ---- cVOLT (Cordon ketiga) ----
+test("cVOLT: alamat salah bentuk atau nol = tidak diisi; default simbol cVOLT, chain 46630", () => {
+  assert.deepEqual(resolveCvoltTarget({ NEXT_PUBLIC_CVOLT_VAULT_ADDRESS: ADDR }), { address: ADDR, chainId: 46630, symbol: "cVOLT" });
+  for (const a of ["", "0x123", "0x" + "0".repeat(40), "zz" + ADDR.slice(2)]) assert.equal(resolveCvoltTarget({ NEXT_PUBLIC_CVOLT_VAULT_ADDRESS: a }), undefined, a);
+});
+test("cVOLT: tiga Cordon hidup berdampingan, tiap simbol hanya mengarah ke vault-nya", () => {
+  const B = "0x" + "bb".repeat(20), C = "0x" + "cc".repeat(20);
+  const env = resolveWeb3Env({ NEXT_MODE: "testnet", NEXT_PUBLIC_REOWN_PROJECT_ID: "p", NEXT_PUBLIC_RH_RPC_TESTNET: "http://r", NEXT_PUBLIC_CORDON_VAULT_ADDRESS: ADDR, NEXT_PUBLIC_CCHIP_VAULT_ADDRESS: B, NEXT_PUBLIC_CVOLT_VAULT_ADDRESS: C });
+  assert.equal(env.vaults?.length, 3);
+  assert.equal(isTradeLive(env, "cVOLT"), true);
+  assert.equal(cordonTargetFor(env, "cVOLT")?.address, C);
+  assert.equal(cordonTargetFor(env, "cCHIP")?.address, B);
+  assert.equal(cordonTargetFor(env, "cMAG7")?.address, ADDR);
+});
+test("cVOLT: tanpa env cVOLT, dua Cordon lain tidak berubah", () => {
+  const env = resolveWeb3Env({ NEXT_PUBLIC_CORDON_VAULT_ADDRESS: ADDR, NEXT_PUBLIC_CCHIP_VAULT_ADDRESS: "0x" + "bb".repeat(20) });
+  assert.equal(env.vaults?.length, 2);
+  assert.equal(cordonTargetFor(env, "cVOLT"), undefined);
 });
