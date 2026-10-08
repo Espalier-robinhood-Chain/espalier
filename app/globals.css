@@ -49,7 +49,7 @@ body {
   .chip-live {
     display: inline-flex; align-items: center; gap: 8px; margin-bottom: 26px; padding: 5px 13px 5px 10px;
     font-size: 0.84rem; font-weight: 500; color: var(--bark); border: 1px solid var(--wire); border-radius: 999px;
-    background: color-mix(in srgb, var(--wall) 70%, transparent); backdrop-filter: blur(6px);
+    background: color-mix(in srgb, var(--wall) 70%, transparent); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
   }
   .chip-live i { width: 8px; height: 8px; border-radius: 50%; background: var(--leaf); animation: breathe 3.2s ease-in-out infinite; }
   .hero-title span { display: block; opacity: 0; transform: translateY(0.25em); animation: rise 0.9s var(--ease) forwards; }
@@ -75,7 +75,7 @@ body {
 }
 
 /* Slider simulator: jalur tipis kulit kayu, ibu jari buah emas (espalier.html). */
-input[type="range"].range-fruit { width: 100%; height: 30px; -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer; }
+input[type="range"].range-fruit { width: 100%; height: 30px; -webkit-appearance: none; -moz-appearance: none; appearance: none; background: transparent; cursor: pointer; }
 input[type="range"].range-fruit::-webkit-slider-runnable-track { height: 3px; background: var(--bark); border-radius: 2px; }
 input[type="range"].range-fruit::-moz-range-track { height: 3px; background: var(--bark); border-radius: 2px; }
 input[type="range"].range-fruit::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -9.5px; border-radius: 50%; background: var(--fruit); border: 2px solid var(--bark); }
@@ -122,6 +122,7 @@ input[type="range"].range-fruit::-moz-range-thumb { width: 18px; height: 18px; b
 main { animation: viewIn 0.55s var(--ease); }
 @keyframes viewIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 .feed { -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); }
-.feed-track { display: flex; gap: 44px; width: max-content; animation: marquee 70s linear infinite; }
+.feed-track { display: flex; width: max-content; animation: marquee 30s linear infinite; }
+.feed-track > * { margin-right: 44px; }
 .feed:hover .feed-track, .feed:focus-within .feed-track { animation-play-state: paused; }
 @keyframes marquee { to { transform: translateX(-50%); } }
