@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createPublicClient } from "@/lib/supabase/public";
 import { changePct, computeStreak, latestHarvest, realizedApy, roundYield, withWeights } from "./derive";
+import { buildHome, type RoundIn } from "./home-derive";
 import { liveCurrentRound } from "./live-round";
 
 type Cordon = { id: string; address: string; symbol: string; name: string; is_demo: boolean };
@@ -140,4 +141,34 @@ export async function getWall(address: string, db: SupabaseClient = createPublic
   // lastHarvest: field tambahan (additive) untuk Harvest Card di /wall; null jika belum ada Harvest.
   return { address, isDemo: positions.some((p) => p.is_demo), totalValueUsd: total, positions: weighted, harvests: harvests.length, streak, lastHarvest: latestHarvest(hRounds, total),
     tree: { address, totalValueUsd: total, positions: weighted.map((p) => ({ id: p.id, weightBps: p.weightBps })), harvests: harvests.length, streak } };
+}
+
+const roundIn = (r: Round): RoundIn => ({ round_no: r.round_no, strike: Number(r.strike), expiry: r.expiry, notional: Number(r.notional),
+  premium_usdg: r.premium_usdg === null ? null : Number(r.premium_usdg), spot_start: r.spot_start === null ? null : Number(r.spot_start),
+  picker: r.picker, settlement_price: r.settlement_price === null ? null : Number(r.settlement_price), settled_at: r.settled_at, status: r.status });
+
+// Data untuk halaman Home. Hanya produk NON-demo (is_demo = false): baris demo tidak pernah ikut dihitung, jadi tidak ada angka karangan.
+// Round berjalan dibaca dari kontrak lebih dulu (sama dengan listVaults), database sebagai cadangan.
+export async function getHomeData(now = new Date()) {
+  const db = createPublicClient();
+  const [cordons, vaults] = await Promise.all([
+    rows<Cordon>(db.from("cordons").select("id,address,symbol,name,is_demo").eq("is_demo", false).order("symbol")),
+    rows<Vault>(db.from("vaults").select("id,address,kind,underlying,symbol,is_demo").eq("is_demo", false).order("symbol")),
+  ]);
+  const cIds = cordons.map((c) => c.id), vIds = vaults.map((v) => v.id);
+  const [navs, rounds, prunings, live] = await Promise.all([
+    Promise.all(cordons.map((c) => recentNav(db, c.id, 1))),
+    vIds.length ? rows<Round>(db.from("rounds").select(ROUND_COLS).in("vault_id", vIds).order("round_no", { ascending: false })) : Promise.resolve([] as Round[]),
+    cIds.length ? rows<{ cordon_id: string; ts: string; drift_after_bps: number }>(db.from("prunings").select("cordon_id,ts,drift_after_bps").in("cordon_id", cIds).order("ts", { ascending: false }).limit(3)) : Promise.resolve([]),
+    Promise.all(vaults.map((v) => liveCurrentRound(v))),
+  ]);
+  return buildHome({
+    cordons: cordons.map((c, i) => ({ symbol: c.symbol, address: c.address, navPerShare: navs[i][0] ? Number(navs[i][0].nav_per_share) : null, tvlUsd: navs[i][0] ? Number(navs[i][0].tvl_usd) : null })),
+    vaults: vaults.map((v, i) => {
+      const mine = rounds.filter((r) => r.vault_id === v.id);
+      const cur = live[i] === undefined ? mine.find((r) => r.status === "open" || r.status === "auctioned") : live[i];
+      return { symbol: v.symbol, kind: v.kind, underlying: v.underlying, address: v.address, rounds: mine.map(roundIn), current: cur ? roundIn(cur as Round) : null };
+    }),
+    prunings: prunings.flatMap((p) => { const c = cordons.find((x) => x.id === p.cordon_id); return c ? [{ symbol: c.symbol, ts: p.ts, driftAfterBps: p.drift_after_bps }] : []; }),
+  }, now);
 }
