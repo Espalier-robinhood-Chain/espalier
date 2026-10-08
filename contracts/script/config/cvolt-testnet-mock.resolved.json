@@ -1,0 +1,72 @@
+{
+  "_note": "Cordon cVOLT (kendaraan listrik) di Robinhood Chain Testnet 46630, memakai OracleRouter yang SUDAH ter-deploy (deploy B1). TSLA = token mock B1 yang sama (dipakai ulang; alamatnya diisi otomatis oleh deploy-cvolt.sh dari deployments/robinhood-testnet-mock-live.json, jangan diisi manual). RIVN, LCID, NIO = token + feed mock baru. Pengirim harus ADMIN OracleRouter (espalier-owner).",
+  "name": "cvolt-testnet-mock",
+  "chainId": 46630,
+  "router": "0x7918Be51162b742DE19d666B88AB5Af134B6Cd0e",
+  "owner": "0xE0bf53F10B12bcd19A979C698809750f34512f47",
+  "cordon": {
+    "name": "Espalier Cordon EV",
+    "symbol": "cVOLT"
+  },
+  "fees": {
+    "_note": "Sama dengan cMAG7 dan cCHIP (10/10/50 bps). Batas hardcode kontrak 100/100/200.",
+    "mintBps": 10,
+    "redeemBps": 10,
+    "managementBps": 50,
+    "recipient": "0xE0bf53F10B12bcd19A979C698809750f34512f47"
+  },
+  "seed": {
+    "_note": "Jumlah mentah per aset (18 desimal), urutan sama dengan assets: TSLA 8, RIVN 160, LCID 800, NIO 480 token. Tiap aset kira-kira US$2,4 per share di harga mock (TSLA 300, RIVN 15, LCID 3, NIO 5). shares minimal 1e18.",
+    "enabled": true,
+    "to": "0xE0bf53F10B12bcd19A979C698809750f34512f47",
+    "shares": "1000000000000000000000",
+    "amounts": [
+      "8000000000000000000",
+      "160000000000000000000",
+      "800000000000000000000",
+      "480000000000000000000"
+    ]
+  },
+  "assets": [
+    {
+      "symbol": "TSLA",
+      "token": "0xb4aAe788721e8b223b1e01779A453577e03fB1eC",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": false,
+      "targetBps": 2500,
+      "mockPriceE8": 0
+    },
+    {
+      "symbol": "RIVN",
+      "token": "0x0000000000000000000000000000000000000000",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": false,
+      "targetBps": 2500,
+      "mockPriceE8": 1500000000
+    },
+    {
+      "symbol": "LCID",
+      "token": "0x0000000000000000000000000000000000000000",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": false,
+      "targetBps": 2500,
+      "mockPriceE8": 300000000
+    },
+    {
+      "symbol": "NIO",
+      "token": "0x0000000000000000000000000000000000000000",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": false,
+      "targetBps": 2500,
+      "mockPriceE8": 500000000
+    }
+  ]
+}

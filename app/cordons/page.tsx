@@ -21,7 +21,7 @@ const sessionFmt = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_Yor
 // Basket pasca-MVP (brief §1). Bukan produk live: tanpa link, tanpa angka.
 const planned = [
   { symbol: "cCHIP", name: "Semiconductors", chips: ["NVDA", "AMD", "AVGO", "TSM"], weighting: "To be set" },
-  { symbol: "cVOLT", name: "Electric vehicles", chips: ["Set from available Stock Tokens"], weighting: null },
+  { symbol: "cVOLT", name: "Electric vehicles", chips: ["TSLA", "RIVN", "LCID", "NIO"], weighting: "Equal" },
 ];
 
 type Loaded = { kind: "ok"; cordons: Awaited<ReturnType<typeof listCordons>>; trends: Record<string, number[]> } | { kind: "unconfigured" } | { kind: "error" };

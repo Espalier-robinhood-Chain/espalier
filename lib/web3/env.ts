@@ -29,7 +29,7 @@ export type Web3Env = {
   siteUrl: string;
   /** undefined = panel tetap mode demo (tanpa transaksi). Vault pertama (cMAG7); sama dengan `vaults[0]`. */
   vault?: VaultTarget;
-  /** Semua CordonVault yang panel mint/redeem-nya hidup (cMAG7 lewat NEXT_PUBLIC_CORDON_VAULT_*, cCHIP lewat NEXT_PUBLIC_CCHIP_VAULT_*). */
+  /** Semua CordonVault yang panel mint/redeem-nya hidup (cMAG7 lewat NEXT_PUBLIC_CORDON_VAULT_*, cCHIP lewat NEXT_PUBLIC_CCHIP_VAULT_*, cVOLT lewat NEXT_PUBLIC_CVOLT_VAULT_*). */
   vaults?: VaultTarget[];
   /** undefined = panel deposit/withdraw Spur tetap mode demo (tanpa transaksi). */
   spur?: SpurTarget;
@@ -51,7 +51,10 @@ export function resolveVaultTarget(e: Record<string, string | undefined>): Vault
 /** Cordon kedua: cCHIP (semikonduktor). Aturan sama dengan `resolveVaultTarget`, env berawalan NEXT_PUBLIC_CCHIP_VAULT_*. */
 export const resolveCchipTarget = (e: Record<string, string | undefined>): VaultTarget | undefined => resolveCordonTarget(e, "CCHIP", "cCHIP");
 
-function resolveCordonTarget(e: Record<string, string | undefined>, p: "CORDON" | "CCHIP", defaultSymbol: string): VaultTarget | undefined {
+/** Cordon ketiga: cVOLT (kendaraan listrik). Aturan sama, env berawalan NEXT_PUBLIC_CVOLT_VAULT_*. */
+export const resolveCvoltTarget = (e: Record<string, string | undefined>): VaultTarget | undefined => resolveCordonTarget(e, "CVOLT", "cVOLT");
+
+function resolveCordonTarget(e: Record<string, string | undefined>, p: "CORDON" | "CCHIP" | "CVOLT", defaultSymbol: string): VaultTarget | undefined {
   const address = clean(e[`NEXT_PUBLIC_${p}_VAULT_ADDRESS`]);
   if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address) || /^0x0{40}$/.test(address)) return undefined;
   const rawChain = clean(e[`NEXT_PUBLIC_${p}_VAULT_CHAIN_ID`]) ?? "46630";
@@ -86,7 +89,8 @@ export const resolveGraftTarget = (e: Record<string, string | undefined>): Graft
 export function resolveWeb3Env(e: Record<string, string | undefined>): Web3Env {
   const vault = resolveVaultTarget(e);
   const cchip = resolveCchipTarget(e);
-  const vaults = [vault, cchip].filter((v): v is VaultTarget => v !== undefined);
+  const cvolt = resolveCvoltTarget(e);
+  const vaults = [vault, cchip, cvolt].filter((v): v is VaultTarget => v !== undefined);
   const spur = resolveSpurTarget(e);
   const graft = resolveGraftTarget(e);
   const mode = resolveNetworkMode(e.NEXT_MODE);
@@ -117,6 +121,9 @@ export const web3Env = resolveWeb3Env({
   NEXT_PUBLIC_CCHIP_VAULT_ADDRESS: process.env.NEXT_PUBLIC_CCHIP_VAULT_ADDRESS,
   NEXT_PUBLIC_CCHIP_VAULT_CHAIN_ID: process.env.NEXT_PUBLIC_CCHIP_VAULT_CHAIN_ID,
   NEXT_PUBLIC_CCHIP_VAULT_SYMBOL: process.env.NEXT_PUBLIC_CCHIP_VAULT_SYMBOL,
+  NEXT_PUBLIC_CVOLT_VAULT_ADDRESS: process.env.NEXT_PUBLIC_CVOLT_VAULT_ADDRESS,
+  NEXT_PUBLIC_CVOLT_VAULT_CHAIN_ID: process.env.NEXT_PUBLIC_CVOLT_VAULT_CHAIN_ID,
+  NEXT_PUBLIC_CVOLT_VAULT_SYMBOL: process.env.NEXT_PUBLIC_CVOLT_VAULT_SYMBOL,
   NEXT_PUBLIC_SPUR_VAULT_ADDRESS: process.env.NEXT_PUBLIC_SPUR_VAULT_ADDRESS,
   NEXT_PUBLIC_SPUR_VAULT_CHAIN_ID: process.env.NEXT_PUBLIC_SPUR_VAULT_CHAIN_ID,
   NEXT_PUBLIC_SPUR_VAULT_SYMBOL: process.env.NEXT_PUBLIC_SPUR_VAULT_SYMBOL,
