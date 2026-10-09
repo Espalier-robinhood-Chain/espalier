@@ -1,5 +1,8 @@
 export interface Config {
-  rpcUrl: string; chainId: number; vault: `0x${string}`; supabaseUrl: string; serviceKey: string;
+  rpcUrl: string; chainId: number; vault: `0x${string}`;
+  /** Semua Cordon yang dirawat keeper: CORDON_VAULT_ADDRESS (utama) + EXTRA_CORDONS. Urutan tetap, tanpa duplikat. */
+  cordons: `0x${string}`[];
+  supabaseUrl: string; serviceKey: string;
   mode: "dry-run" | "live"; privateKey: `0x${string}` | null; pollMs: number; thresholdBps: number; minIntervalDays: number; slippageBps: number; minTradeUsd: number; maxTrades: number;
   /** Keeper Spur (opsional): null bila SPUR_VAULT_ADDRESS kosong. */
   spur: SpurConfig | null;
@@ -29,6 +32,7 @@ export function loadConfig(e: Record<string, string | undefined>): Config {
   if (mode === "live" && pk === null) throw new Error("KEEPER_MODE=live butuh KEEPER_PRIVATE_KEY");
   return {
     rpcUrl: need(e, "KEEPER_RPC_URL"), chainId: int(e, "KEEPER_CHAIN_ID", 46630, 1), vault: vault as `0x${string}`,
+    cordons: [vault as `0x${string}`, ...loadExtraCordons(e, vault)],
     supabaseUrl: url, serviceKey: need(e, "SUPABASE_SERVICE_ROLE_KEY"), mode, privateKey: pk as `0x${string}` | null,
     pollMs: int(e, "POLL_MS", 60_000, 5000), thresholdBps: int(e, "DRIFT_THRESHOLD_BPS", 100, 1, 10_000),
     minIntervalDays: int(e, "MIN_INTERVAL_DAYS", 30, 0), slippageBps: int(e, "SLIPPAGE_BPS", 50, 0, 10_000),
@@ -58,4 +62,24 @@ function loadVault(e: Record<string, string | undefined>, p: "SPUR" | "GRAFT"): 
     vault: vault as `0x${string}`, mode, keeperAddress: addr as `0x${string}` | null, privateKey: pk as `0x${string}` | null,
     rfqUrl, rfqToken: e.RFQ_TOKEN?.trim() || null, rfqTimeoutMs: int(e, "RFQ_TIMEOUT_MS", 5000, 500, 60_000),
   };
+}
+
+/**
+ * EXTRA_CORDONS: daftar Cordon tambahan dipisah koma (cCHIP, cVOLT, dst.). Bentuknya sama dengan EXTRA_CORDONS milik indexer
+ * ("0xalamat@blokDeploy"), jadi nilai yang sama boleh disalin utuh; bagian "@blok" diabaikan oleh keeper. "0xalamat" polos juga sah.
+ * Gagal keras bila salah bentuk, duplikat, atau sama dengan CORDON_VAULT_ADDRESS.
+ */
+function loadExtraCordons(e: Record<string, string | undefined>, primary: string): `0x${string}`[] {
+  const raw = e.EXTRA_CORDONS?.trim();
+  if (!raw) return [];
+  const seen = new Set<string>([primary.toLowerCase()]);
+  return raw.split(",").map((part) => part.trim()).filter(Boolean).map((part) => {
+    const [addr, block, ...rest] = part.split("@");
+    if (rest.length || !addr) throw new Error(`env EXTRA_CORDONS: "${part}" harus berbentuk 0xalamat atau 0xalamat@blokDeploy`);
+    if (!ADDR.test(addr) || /^0x0{40}$/.test(addr)) throw new Error(`env EXTRA_CORDONS: alamat tidak valid (${addr})`);
+    if (block !== undefined && !/^\d+$/.test(block)) throw new Error(`env EXTRA_CORDONS: blok deploy untuk ${addr} harus bilangan bulat >= 0`);
+    if (seen.has(addr.toLowerCase())) throw new Error(`env EXTRA_CORDONS: alamat ganda atau sama dengan CORDON_VAULT_ADDRESS (${addr})`);
+    seen.add(addr.toLowerCase());
+    return addr as `0x${string}`;
+  });
 }

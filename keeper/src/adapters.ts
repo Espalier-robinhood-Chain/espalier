@@ -35,6 +35,14 @@ export async function createKeeperChain(rpcUrl: string, vault: `0x${string}`, ex
   };
 }
 
+/** Simbol ERC-20 vault (cMAG7, cCHIP, ...) untuk log dan keeper_runs; bila gagal dibaca, pakai alamat pendek. */
+export async function readCordonLabel(rpcUrl: string, vault: `0x${string}`): Promise<string> {
+  try {
+    const client = createPublicClient({ transport: http(rpcUrl, { retryCount: 3 }) }) as PublicClient;
+    return await client.readContract({ address: getAddress(vault), abi: erc20Abi, functionName: "symbol" });
+  } catch { return `${vault.slice(0, 6)}…${vault.slice(-4)}`; }
+}
+
 const KEEPER_ROLE = keccak256(toHex("KEEPER_ROLE"));
 
 /**
@@ -81,7 +89,8 @@ export const dryRunExecutor: Executor = {
   async execute() { throw new Error("dry-run executor tidak mengirim transaksi"); },
 };
 
-export function createKeeperStore(url: string, serviceKey: string, vault: string): KeeperStore {
+/** `label` (simbol Cordon) masuk ke kolom `job` ("prune:cCHIP") karena keeper_runs tidak punya kolom cordon; tanpa label tetap "prune". */
+export function createKeeperStore(url: string, serviceKey: string, vault: string, label?: string): KeeperStore {
   const db = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const check = (what: string, error: { message: string } | null) => { if (error) throw new Error(`${what}: ${error.message}`); };
   let cordonId: string | undefined;
@@ -99,7 +108,7 @@ export function createKeeperStore(url: string, serviceKey: string, vault: string
       return data ? new Date(data.ts as string) : null;
     },
     async startRun() {
-      const { data, error } = await db.from("keeper_runs").insert({ job: "prune", status: "running" }).select("id").single();
+      const { data, error } = await db.from("keeper_runs").insert({ job: label ? `prune:${label}` : "prune", status: "running" }).select("id").single();
       check("keeper_runs insert", error);
       return Number(data!.id);
     },
