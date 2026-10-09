@@ -2,6 +2,7 @@ node_modules
 .next
 .turbo
 .env*.local
+vercel.env
 *.tsbuildinfo
 
 # rahasia (jangan pernah di-commit)
