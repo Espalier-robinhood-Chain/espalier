@@ -10,7 +10,8 @@ test("usdToE8: dolar ke 8 desimal", () => {
   assert.equal(usdToE8("15.5"), 1550000000n);
   assert.equal(usdToE8("0.03"), 3000000n);
   assert.equal(usdToE8("3.12345678"), 312345678n);
-  for (const bad of ["0", "0.0", "-1", "1.123456789", "abc", "", "1e3"]) assert.throws(() => usdToE8(bad), undefined, bad);
+  for (const bad of ['0', '0.0', '-1', '1.123456789', 'abc', '', '1e3'])
+    assert.throws(() => usdToE8(bad), Error, bad);
 });
 test("loadFeedConfig: harga per feed dan nilai bawaan", () => {
   const c = loadFeedConfig(ok);
