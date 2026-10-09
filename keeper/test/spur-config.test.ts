@@ -21,8 +21,8 @@ test("config: live butuh kunci; dry-run butuh alamat; nilai salah ditolak, bukan
   assert.equal(loadConfig({ ...base, SPUR_VAULT_ADDRESS: V, SPUR_MODE: "live", KEEPER_PRIVATE_KEY: K, RFQ_URL: "https://r", RFQ_TOKEN: "t" }).spur!.mode, "live");
 });
 
-test("config: KEEPER_MODE untuk pruning Cordon tetap hanya dry-run", () => {
-  assert.throws(() => loadConfig({ ...base, KEEPER_MODE: "live" }), /belum didukung/);
+test("config: KEEPER_MODE live untuk pruning Cordon butuh kunci keeper", () => {
+  assert.throws(() => loadConfig({ ...base, KEEPER_MODE: "live" }), /KEEPER_PRIVATE_KEY/);
 });
 
 test("config: Graft opsional, env sendiri (GRAFT_*), tidak mengubah Spur", () => {

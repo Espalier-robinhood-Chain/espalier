@@ -121,7 +121,9 @@ const ENV = { KEEPER_RPC_URL: "http://x", CORDON_VAULT_ADDRESS: "0x" + "aa".repe
 test("loadConfig: default, wajib, dan mode live ditolak", () => {
   const c = loadConfig(ENV);
   assert.equal(c.mode, "dry-run"); assert.equal(c.thresholdBps, 100); assert.equal(c.minIntervalDays, 30);
-  assert.throws(() => loadConfig({ ...ENV, KEEPER_MODE: "live" }), /belum didukung/);
+  assert.throws(() => loadConfig({ ...ENV, KEEPER_MODE: "live" }), /KEEPER_PRIVATE_KEY/);
+  assert.throws(() => loadConfig({ ...ENV, KEEPER_MODE: "yolo" }), /dry-run atau live/);
+  assert.equal(loadConfig({ ...ENV, KEEPER_MODE: "live", KEEPER_PRIVATE_KEY: "0x" + "11".repeat(32) }).mode, "live");
   assert.throws(() => loadConfig({ ...ENV, KEEPER_RPC_URL: "" }), /KEEPER_RPC_URL/);
   assert.throws(() => loadConfig({ ...ENV, SLIPPAGE_BPS: "10001" }), /SLIPPAGE_BPS/);
   assert.throws(() => loadConfig({ ...ENV, MAX_TRADES: "0" }), /MAX_TRADES/);
