@@ -19,6 +19,7 @@ import type { HomeData } from '@/lib/api/home-derive';
 import { getHomeData } from '@/lib/api/queries';
 import { pct, usd } from '@/lib/format';
 import { web3Env } from '@/lib/web3/env';
+import { Logo } from '@/components/logo';
 
 // Angka di halaman ini dibaca dari data nyata dan berubah tiap round: jangan dibekukan saat build.
 export const dynamic = 'force-dynamic';
@@ -372,22 +373,11 @@ export default async function Landing() {
 
         {/* Manifesto */}
         <section
-          aria-labelledby="manifesto-title"
+          aria-label="Manifesto"
           className="wrap grid gap-3 pt-20 pb-14 md:grid-cols-[200px_1fr] md:gap-10"
         >
           <div className="pt-3 text-sm text-bark">
-            <svg
-              viewBox="0 0 64 40"
-              fill="none"
-              stroke="var(--bark)"
-              strokeWidth="1.2"
-              strokeLinecap="round"
-              aria-hidden
-              className="mb-3.5 block h-auto w-16"
-            >
-              <path d="M32 40V4M32 14H12q-6 0-6-8M32 14h20q6 0 6-8M32 28H6q-5 0-5-7M32 28h26q5 0 5-7" />
-            </svg>
-            <h2 id="manifesto-title">Manifesto</h2>
+            <Logo className="mb-3.5 size-14" />
           </div>
           <blockquote className="max-w-[34em] space-y-5 font-display text-[clamp(1.3rem,2.4vw,1.85rem)] leading-[1.42] font-light">
             <p>

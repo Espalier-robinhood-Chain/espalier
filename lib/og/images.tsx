@@ -3,6 +3,7 @@ import { ImageResponse } from "next/og";
 import { generateTree, treeSvg, type TreeInput } from "@/lib/tree";
 import { harvestHeadline, harvestSub, OG_SIZE, TAGLINE, wallHeadline, wallStats } from "./copy";
 import { ogFonts } from "./fonts";
+import { LOGO_URI } from "./logo";
 import { PALETTE as C, TRELLIS_URI } from "./palette";
 
 // Aturan satori: setiap <div> dengan lebih dari satu anak harus display:flex; tanpa CSS variable.
@@ -19,7 +20,12 @@ function Frame({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-const Wordmark = () => <div style={{ display: "flex", fontFamily: "Fraunces", fontSize: 40 }}>Espalier</div>;
+const Wordmark = () => (
+  <div style={{ display: "flex", alignItems: "center", gap: 16, fontFamily: "Fraunces", fontSize: 40 }}>
+    <img src={LOGO_URI} width={52} height={52} alt="" />
+    Espalier
+  </div>
+);
 const Tagline = () => <div style={{ display: "flex", fontSize: 26, color: C.bark }}>{TAGLINE}</div>;
 const Pill = ({ children }: { children: React.ReactNode }) => (
   <div style={{ display: "flex", border: `2px solid ${C.wire}`, borderRadius: 999, padding: "6px 18px", fontSize: 24, color: C.bark }}>{children}</div>

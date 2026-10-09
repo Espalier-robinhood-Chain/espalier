@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
+import { Logo } from './logo';
 import { HeaderMarketChip } from './header-market';
 import { ThemeToggle } from './theme-toggle';
 import { WalletButton } from './wallet-button';
@@ -25,25 +26,7 @@ export function Header() {
           aria-label="Espalier home"
           className="flex items-center gap-2.5 font-display text-[1.45rem] font-medium tracking-[-.01em]"
         >
-          <svg
-            viewBox="0 0 32 32"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            aria-hidden
-            className="size-7 shrink-0"
-          >
-            <path d="M16 29V5M16 12H8q-2 0-2-3M16 12h8q2 0 2-3M16 21H6q-2 0-2-3M16 21h10q2 0 2-3" />
-            <circle
-              cx="26"
-              cy="7.5"
-              r="2.2"
-              fill="var(--fruit)"
-              stroke="var(--bark)"
-              strokeWidth=".8"
-            />
-          </svg>
+          <Logo priority />
           Espalier
         </Link>
         <nav
