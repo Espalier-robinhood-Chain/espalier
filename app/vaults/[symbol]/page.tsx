@@ -268,9 +268,10 @@ function Body({ vault }: { vault: Vault }) {
     premiumHint,
   } = vault;
   const isSpur = kind === 'spur';
-  // Simulator wajib sebelum deposit ke Spur (brief §4). Butuh strike dan harga awal round aktif.
+  // Simulator wajib sebelum deposit ke Spur (brief §4), dan sama pentingnya untuk Graft karena risiko turunnya lebih besar.
+  // Butuh strike dan harga awal round aktif.
   const sim =
-    isSpur && cur && cur.spotStart
+    cur && cur.spotStart
       ? {
           spot: cur.spotStart,
           strike: cur.strike,
@@ -389,6 +390,7 @@ function Body({ vault }: { vault: Vault }) {
               strike={sim.strike}
               weeklyPremiumPct={sim.premiumPct}
               spotLabel="the round's starting price"
+              kind={isSpur ? 'spur' : 'graft'}
             />
             <p className="mt-3 text-sm text-bark">
               {premiumHint?.source === 'round' && "Uses this round's premium."}

@@ -57,6 +57,36 @@ const qtyFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 });
 const H2 = "font-display text-[clamp(2rem,4.4vw,3.3rem)] leading-[1.02] font-normal tracking-[-.025em]";
 const HISTORY_MAX = 20;
 
+// Kartu hero satu vault: round aktifnya sendiri (nomor, status, hitung mundur). Spur dan Graft punya round masing-masing.
+function HeroRoundCard({ vault, fallback, kind, hasSpur }: { vault: Vault | null; fallback: string | null; kind: "spur" | "graft"; hasSpur: boolean }) {
+  const symbol = vault?.symbol ?? fallback;
+  if (!symbol) return null;
+  const cur = vault?.currentRound ?? null;
+  const id = `round-title-${kind}`;
+  return (
+    <section aria-labelledby={id} className={`wrap ${kind === "spur" || !hasSpur ? "pt-11" : "pt-6"}`}>
+      <div className="relative overflow-hidden rounded-[28px] bg-panel px-7 py-12 md:px-14">
+        <TrellisBackground />
+        <div className="relative grid items-center gap-8 md:grid-cols-[1fr_auto]">
+          <div className="max-w-[56ch] space-y-4">
+            <p className="m-0 font-mono text-[.82rem] text-bark">{symbol} · {kind === "spur" ? "Spur" : "Graft"}</p>
+            <h2 id={id} className={H2}>{cur ? `Round #${cur.no}` : "No round is open"}</h2>
+            <p className="text-bark">
+              {!cur && "The next round opens soon. Past rounds are listed below."}
+              {cur?.status === "auctioned" && "Premium is already paid. The round is waiting for expiry."}
+              {cur?.status === "open" && "The round is open. A Picker has not paid the premium yet."}
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <ButtonLink href={`/vaults/${symbol}`} variant="ghost">Open {symbol}</ButtonLink>
+            </div>
+          </div>
+          {cur && <div className="md:min-w-[320px]"><RoundCountdown expiry={cur.expiry} label="Time to expiry" /></div>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function VaultRoundPanel({ vault, fallback, kind }: { vault: Vault | null; fallback: string | null; kind: "spur" | "graft" }) {
   const label = kind === "spur" ? "Spur Vault" : "Graft Vault";
   const symbol = vault?.symbol ?? fallback;
@@ -95,12 +125,7 @@ export default async function HarvestPage() {
   const data = await load();
   const spur = data.kind === "ok" ? data.spur : null;
   const graft = data.kind === "ok" ? data.graft : null;
-  // Hero: vault yang punya round aktif (Spur diutamakan); kalau tidak ada, Spur, lalu Graft.
-  const vault = (spur?.currentRound ? spur : graft?.currentRound ? graft : spur ?? graft) ?? null;
-  const cur = vault?.currentRound ?? null;
   const history = [spur, graft].flatMap((v) => (v && v.rounds.length > 0 ? [v] : []));
-  // Tombol hero: semua vault yang ada (Spur lalu Graft), termasuk yang dikonfigurasi tetapi belum diindeks.
-  const heroLinks = [spur?.symbol ?? configuredSymbol("spur"), graft?.symbol ?? configuredSymbol("graft")].filter((x): x is string => !!x);
   const anyDemo = !!(spur?.isDemo || graft?.isDemo);
 
   return (
@@ -129,27 +154,8 @@ export default async function HarvestPage() {
 
         {data.kind === "ok" && (
           <>
-            <section aria-labelledby="round-title" className="wrap pt-11">
-              <div className="relative overflow-hidden rounded-[28px] bg-panel px-7 py-12 md:px-14">
-                <TrellisBackground />
-                <div className="relative grid items-center gap-8 md:grid-cols-[1fr_auto]">
-                  <div className="max-w-[56ch] space-y-4">
-                    <h2 id="round-title" className={H2}>{cur ? `Round #${cur.no}` : "No round is open"}</h2>
-                    <p className="text-bark">
-                      {!cur && "The next round opens soon. Past rounds are listed below."}
-                      {cur?.status === "auctioned" && "Premium is already paid. The round is waiting for expiry."}
-                      {cur?.status === "open" && "The round is open. A Picker has not paid the premium yet."}
-                    </p>
-                    {heroLinks.length > 0 && (
-                      <div className="flex flex-wrap gap-3">
-                        {heroLinks.map((sym) => <ButtonLink key={sym} href={`/vaults/${sym}`} variant="ghost">Open {sym}</ButtonLink>)}
-                      </div>
-                    )}
-                  </div>
-                  {cur && <div className="md:min-w-[320px]"><RoundCountdown expiry={cur.expiry} label="Time to expiry" /></div>}
-                </div>
-              </div>
-            </section>
+            <HeroRoundCard kind="spur" hasSpur vault={spur} fallback={configuredSymbol("spur")} />
+            <HeroRoundCard kind="graft" hasSpur={!!(spur ?? configuredSymbol("spur"))} vault={graft} fallback={configuredSymbol("graft")} />
 
             <section aria-labelledby="ritual-title" className="wrap py-[72px]">
               <div className="mb-11 grid items-end gap-6 md:grid-cols-2 md:gap-12">
