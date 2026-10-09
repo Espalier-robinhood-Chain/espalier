@@ -19,6 +19,8 @@ PICKER_ACCOUNT="${PICKER_ACCOUNT:-espalier-owner}"
 FEED_ACCOUNT="${FEED_ACCOUNT:-espalier-testnet}"   # siapa saja boleh memanggil setRound pada feed mock
 
 SPUR=0xAc0f403c12C2EfB83C5e6141cDea7984Ec78070A
+# Setelah deploy-spur.sh (vault lama macet), pakai vault pengganti.
+if [ -f deployments/spur-v2-testnet-mock.json ] && command -v jq >/dev/null; then SPUR="$(jq -r .spurVault deployments/spur-v2-testnet-mock.json)"; fi
 GRAFT=0x2821622d360Ded342648178db155bF3F1b637695
 ROUTER=0x7918Be51162b742DE19d666B88AB5Af134B6Cd0e
 ZERO=0x0000000000000000000000000000000000000000
