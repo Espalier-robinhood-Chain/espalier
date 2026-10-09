@@ -15,6 +15,9 @@ const links = [
   ['/wall', 'The Wall'],
   ['/docs', 'Docs & Risk'],
 ];
+// Tautan akun X resmi. Isi NEXT_PUBLIC_X_URL (mis. https://x.com/namaakun) di .env dan di hosting.
+const X_URL = process.env.NEXT_PUBLIC_X_URL || 'https://x.com/';
+
 export function Header() {
   const path = usePathname();
   const [open, setOpen] = useState(false);
@@ -55,6 +58,17 @@ export function Header() {
         </nav>
         <span className="flex-1" />
         <HeaderMarketChip />
+        <a
+          href={X_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Espalier on X (opens in a new tab)"
+          className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full border border-wire px-3 text-ink hover:border-bark focus-visible:outline-2 focus-visible:outline-leaf"
+        >
+          <svg aria-hidden viewBox="0 0 24 24" className="h-4 w-4 fill-current">
+            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+          </svg>
+        </a>
         <ThemeToggle />
         <WalletButton />
         <button
@@ -84,9 +98,6 @@ const footerLinks = [
 ];
 const chip =
   'inline-flex min-h-9 items-center rounded-full border border-wire bg-panel px-3 font-mono text-[.78rem] text-ink hover:border-bark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-leaf';
-// Tautan akun X resmi. Isi NEXT_PUBLIC_X_URL (mis. https://x.com/namaakun) di .env dan di hosting.
-const X_URL = process.env.NEXT_PUBLIC_X_URL || 'https://x.com/';
-
 export function Footer() {
   return (
     <footer className="mt-10 border-t border-wire pt-14 pb-[calc(40px+env(safe-area-inset-bottom,0px))] text-bark">
