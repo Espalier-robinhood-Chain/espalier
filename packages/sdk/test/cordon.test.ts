@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { maxWithSlippage, minWithSlippage, fullMask } from "../src/cordon.ts";
+import { maxWithSlippage, minWithSlippage, fullMask, readUsdgVenue, quoteRedeemToUsdg } from "../src/cordon.ts";
 import { parseDeployment } from "../src/deployments.ts";
 
 test("maxWithSlippage membulatkan ke atas, 0 tetap 0", () => {
@@ -41,4 +41,34 @@ test("parseDeployment: spurVault/graftVault/harvestAuction opsional tapi divalid
   assert.equal(d.graftVault?.toLowerCase(), B);
   assert.equal(d.spurVault, undefined);
   assert.throws(() => parseDeployment({ ...good, graftVault: "0xabc" }), /graftVault/);
+});
+
+// ---- redeem ke USDG ----
+const VAULT = "0x" + "aa".repeat(20) as `0x${string}`;
+const ZERO = "0x0000000000000000000000000000000000000000";
+const fakeClient = (answers: Record<string, unknown>) => ({
+  readContract: async ({ functionName }: { functionName: string }) => {
+    const v = answers[functionName];
+    if (v instanceof Error) throw v;
+    return v;
+  },
+}) as never;
+
+test("readUsdgVenue: null bila venue belum dipasang, kontrak lama (panggilan gagal), atau USDG nol", async () => {
+  const U = "0x" + "bb".repeat(20), V = "0x" + "cc".repeat(20);
+  assert.deepEqual(await readUsdgVenue(fakeClient({ executionVenue: V, usdgToken: U }), VAULT), { venue: V, usdg: U });
+  assert.equal(await readUsdgVenue(fakeClient({ executionVenue: ZERO, usdgToken: ZERO }), VAULT), null);
+  assert.equal(await readUsdgVenue(fakeClient({ executionVenue: V, usdgToken: ZERO }), VAULT), null);
+  assert.equal(await readUsdgVenue(fakeClient({ executionVenue: new Error("revert"), usdgToken: new Error("revert") }), VAULT), null);
+});
+
+test("quoteRedeemToUsdg menggabungkan USDG, komponen, dan fee; galat venue (harga tidak ada) dilempar", async () => {
+  const q = await quoteRedeemToUsdg(fakeClient({ previewRedeemToUsdg: 250_000_000n, previewRedeem: [1n, 2n], feeOnRedeem: 5n }), VAULT, 10n);
+  assert.deepEqual(q, { shares: 10n, amounts: [1n, 2n], feeShares: 5n, usdgOut: 250_000_000n });
+  await assert.rejects(quoteRedeemToUsdg(fakeClient({ previewRedeemToUsdg: new Error("PriceUnavailable"), previewRedeem: [], feeOnRedeem: 0n }), VAULT, 1n), /PriceUnavailable/);
+});
+
+test("batas USDG minimum memakai minWithSlippage pada total", () => {
+  assert.deepEqual(minWithSlippage([250_000_000n], 50), [248_750_000n]);
+  assert.deepEqual(minWithSlippage([250_000_000n], 100), [247_500_000n]);
 });

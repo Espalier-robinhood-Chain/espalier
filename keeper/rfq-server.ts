@@ -1,7 +1,11 @@
 import { createServer } from 'node:http';
 import { privateKeyToAccount } from 'viem/accounts';
-const PICKER_KEY = process.env.RFQ_PICKER_PRIVATE_KEY?.trim() as `0x${string}`;
-const TOKEN = process.env.RFQ_TOKEN?.trim()!;;
+const PICKER_KEY = process.env.RFQ_PICKER_PRIVATE_KEY?.trim() as
+  | `0x${string}`
+  | undefined;
+const TOKEN = process.env.RFQ_TOKEN?.trim();
+if (!PICKER_KEY) throw new Error('RFQ_PICKER_PRIVATE_KEY kosong');
+if (!TOKEN) throw new Error('RFQ_TOKEN kosong');
 const PREMIUM = BigInt(process.env.RFQ_PREMIUM_RAW ?? '5000000'); // 5 USDG (6 desimal)
 const picker = privateKeyToAccount(PICKER_KEY);
 

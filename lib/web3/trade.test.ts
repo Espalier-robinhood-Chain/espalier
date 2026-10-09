@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cordonErrorMessage, formatAmount, isUserRejection, parseAmount, pendingApprovals } from "./trade.ts";
+import { cordonErrorMessage, formatAmount, isUserRejection, parseAmount, pendingApprovals, USDG_PRICE_UNAVAILABLE } from "./trade.ts";
 
 test("parseAmount: desimal valid ke satuan terkecil", () => {
   assert.equal(parseAmount("1", 18), 10n ** 18n);
@@ -53,4 +53,10 @@ test("pendingApprovals: hanya komponen dengan kebutuhan > 0 dan allowance kurang
   assert.deepEqual(pendingApprovals([0n, 10n, 5n, 0n], [3n, 10n, 6n, 0n]), [0, 2]);
   assert.deepEqual(pendingApprovals([], []), []);
   assert.deepEqual(pendingApprovals([100n], [100n]), []);
+});
+
+test("cordonErrorMessage: galat redeem ke USDG punya pesan sendiri", () => {
+  assert.match(cordonErrorMessage({ name: "VenueNotSet" }), /not enabled.*Redeem in-kind/);
+  assert.match(cordonErrorMessage({ name: "UsdgSlippage" }), /USDG payout fell below your slippage limit/);
+  assert.match(USDG_PRICE_UNAVAILABLE, /Redeem in-kind instead/);
 });

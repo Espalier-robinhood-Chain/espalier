@@ -9,6 +9,7 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IOracleRouter} from "./interfaces/IOracleRouter.sol";
+import {IExecutionVenue} from "./interfaces/IExecutionVenue.sol";
 
 /// @title CordonVault
 /// @notice Basket Stock Token (mis. cMAG7). Share ERC-20 adalah klaim proporsional atas saldo semua komponen.
@@ -33,8 +34,9 @@ import {IOracleRouter} from "./interfaces/IOracleRouter.sol";
 ///      - ADMIN = `DEFAULT_ADMIN_ROLE` (di produksi: TimelockController 48 jam): `setFees`, `setFeeRecipient`, `seed`.
 ///      - Jeda per aset ada di OracleRouter (`pauseAsset`, GUARDIAN/ADMIN): `mint` ditolak bila SALAH SATU komponen
 ///        dijeda. `redeem` TIDAK PERNAH ditutup oleh peran mana pun (keluar in-kind tidak butuh oracle).
-///      BELUM ADA (item lain): mint/redeem lewat USDG (butuh `IExecutionVenue`, Fase 3 item 1, dan riset likuiditas
-///      DEX, Fase 0 item 5), Pruning dan peran KEEPER di vault ini (Fase 3).
+///      Redeem ke USDG (`redeemToUsdg`) memakai `IExecutionVenue` yang dipasang ADMIN lewat `setExecutionVenue`; mati
+///      (VenueNotSet) sampai venue dipasang. Untuk mainnet perlu venue DEX sungguhan (riset likuiditas, Fase 0 item 5).
+///      BELUM ADA (item lain): mint lewat USDG, Pruning dan peran KEEPER di vault ini (Fase 3).
 ///      Bobot target hanya informasi (dipakai UI dan Pruning nanti); komposisi sebenarnya mengikuti saldo.
 contract CordonVault is ERC20, AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -62,6 +64,11 @@ contract CordonVault is ERC20, AccessControl, ReentrancyGuard {
 
     IOracleRouter public immutable ROUTER;
 
+    /// Venue untuk menjual komponen ke USDG (`redeemToUsdg`). address(0) = fitur mati; redeem in-kind selalu tersedia.
+    IExecutionVenue public executionVenue;
+    /// USDG milik venue yang terpasang (0 bila tidak ada venue).
+    address public usdgToken;
+
     address[] private _components;
     uint8[] private _decimals;
     uint16[] private _targetBps;
@@ -75,6 +82,11 @@ contract CordonVault is ERC20, AccessControl, ReentrancyGuard {
     );
     event FeesSet(uint16 mintFeeBps, uint16 redeemFeeBps, uint16 managementFeeBps);
     event FeeRecipientSet(address indexed recipient);
+    /// Venue USDG dipasang atau dimatikan (venue = 0 dan usdg = 0 berarti mati).
+    event ExecutionVenueSet(address indexed venue, address indexed usdg);
+    event RedeemedToUsdg(
+        address indexed by, address indexed to, uint256 shares, uint256 feeShares, uint256 usdgOut, uint256[] amounts
+    );
     event ManagementFeeAccrued(address indexed recipient, uint256 shares);
 
     error ZeroAddress();
@@ -93,6 +105,12 @@ contract CordonVault is ERC20, AccessControl, ReentrancyGuard {
     error FeeRecipientRequired();
     error InvalidFeeRecipient();
     error AssetPaused(address token);
+    /// `redeemToUsdg` / `previewRedeemToUsdg` dipanggil padahal belum ada venue.
+    error VenueNotSet();
+    /// Venue tidak valid: bukan kontrak, vault sendiri, atau USDG-nya salah satu komponen vault.
+    error InvalidVenue();
+    /// USDG yang diterima kurang dari `minimum`.
+    error UsdgSlippage(uint256 received, uint256 minimum);
 
     constructor(
         address admin,
@@ -208,6 +226,15 @@ contract CordonVault is ERC20, AccessControl, ReentrancyGuard {
         }
     }
 
+    /// USDG yang diterima bila `shares` ditebus dan semua komponen dijual sekarang lewat venue (setelah fee redeem dan fee
+    /// manajemen terutang). Memakai harga LIVE: revert bila pasar tutup atau harga tidak segar. Revert `VenueNotSet` bila mati.
+    function previewRedeemToUsdg(uint256 shares) public view returns (uint256 usdgOut) {
+        IExecutionVenue venue = executionVenue;
+        if (address(venue) == address(0)) revert VenueNotSet();
+        address[] memory comps = _components;
+        return venue.quoteSell(comps, previewRedeem(shares));
+    }
+
     /// Nilai total (USD, 18 desimal) dan NAV per share (USD, 18 desimal) dengan harga ACUAN router.
     /// ok = false bila ada komponen tanpa harga valid (jangan dipakai untuk keputusan).
     function tryNav() public view returns (bool ok, uint256 totalValueE18, uint256 navPerShareE18) {
@@ -316,6 +343,68 @@ contract CordonVault is ERC20, AccessControl, ReentrancyGuard {
             if (amounts[i] != 0) IERC20(_components[i]).safeTransfer(to, amounts[i]);
         }
         emit Redeemed(msg.sender, to, shares, fee, componentMask, amounts);
+    }
+
+    /// Seperti `redeem` dengan semua komponen, tetapi komponen dijual lewat venue dan pemanggil menerima USDG di `to`.
+    /// Fee redeem tetap dibayar dalam share. Revert `UsdgSlippage` bila USDG yang benar-benar diterima < `minUsdg`
+    /// (diukur dari saldo `to`, bukan dari angka yang dilaporkan venue). Butuh harga live, jadi gagal saat pasar tutup.
+    function redeemToUsdg(uint256 shares, address to, uint256 minUsdg)
+        external
+        nonReentrant
+        returns (uint256 usdgOut, uint256[] memory amounts)
+    {
+        IExecutionVenue venue = executionVenue;
+        if (address(venue) == address(0)) revert VenueNotSet();
+        if (shares == 0) revert ZeroAmount();
+        if (to == address(0)) revert ZeroAddress();
+
+        _accrue();
+        uint256 fee = feeOnRedeem(shares);
+        amounts = previewRedeem(shares); // dihitung sebelum burn, dari share bersih setelah fee
+        _burn(msg.sender, shares - fee);
+        if (fee != 0) _transfer(msg.sender, feeRecipient, fee);
+
+        address[] memory comps = _components;
+        for (uint256 i; i < comps.length; ++i) {
+            if (amounts[i] != 0) IERC20(comps[i]).forceApprove(address(venue), amounts[i]);
+        }
+        IERC20 usdg = IERC20(usdgToken);
+        uint256 before = usdg.balanceOf(to);
+        venue.sell(comps, amounts, to);
+        usdgOut = usdg.balanceOf(to) - before;
+        for (uint256 i; i < comps.length; ++i) {
+            if (amounts[i] != 0) IERC20(comps[i]).forceApprove(address(venue), 0); // bersihkan sisa allowance
+        }
+        if (usdgOut < minUsdg) revert UsdgSlippage(usdgOut, minUsdg);
+        emit RedeemedToUsdg(msg.sender, to, shares, fee, usdgOut, amounts);
+    }
+
+    // ------------------------------------------------------------ admin venue
+
+    /// Pasang venue USDG (atau matikan dengan address(0)). Venue harus kontrak, bukan vault ini, dan USDG-nya harus
+    /// kontrak yang bukan salah satu komponen vault. Redeem in-kind tidak terpengaruh.
+    function setExecutionVenue(address venue) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant {
+        if (venue == address(0)) {
+            executionVenue = IExecutionVenue(address(0));
+            usdgToken = address(0);
+            emit ExecutionVenueSet(address(0), address(0));
+            return;
+        }
+        if (venue == address(this) || venue.code.length == 0) revert InvalidVenue();
+        address usdg;
+        try IExecutionVenue(venue).USDG() returns (address u) {
+            usdg = u;
+        } catch {
+            revert InvalidVenue();
+        }
+        if (usdg == address(0) || usdg == address(this) || usdg.code.length == 0) revert InvalidVenue();
+        uint256 n = _components.length;
+        for (uint256 i; i < n; ++i) {
+            if (_components[i] == usdg) revert InvalidVenue();
+        }
+        executionVenue = IExecutionVenue(venue);
+        usdgToken = usdg;
+        emit ExecutionVenueSet(venue, usdg);
     }
 
     // ------------------------------------------------------------ admin fee

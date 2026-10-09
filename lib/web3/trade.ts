@@ -52,6 +52,8 @@ export function cordonErrorMessage(e: CordonError, symbols: readonly string[] = 
     case "LengthMismatch": return "The quote is out of date. Refresh and try again.";
     case "PriceUnavailable": return `No valid price for ${tok(e.index)} right now. Try again when the market is open.`;
     case "ZeroAddress": return "Invalid recipient address.";
+    case "VenueNotSet": return "Redeeming to USDG is not enabled for this cordon. Redeem in-kind instead.";
+    case "UsdgSlippage": return "The USDG payout fell below your slippage limit. Refresh the quote and try again, or raise slippage.";
     case "ERC20InsufficientAllowance": return "Token allowance is too low. Approve the token first.";
     case "ERC20InsufficientBalance": return "Your balance is too low for this amount.";
     default: return "The transaction would fail on-chain. Nothing was sent.";
@@ -67,3 +69,6 @@ export function pendingApprovals(allowances: readonly bigint[], required: readon
   for (let i = 0; i < required.length; i++) if ((required[i] ?? 0n) > 0n && (allowances[i] ?? 0n) < (required[i] ?? 0n)) out.push(i);
   return out;
 }
+
+/** Pesan saat kuotasi atau transaksi "To USDG" gagal karena harga live tidak ada (tidak masuk ABI vault, jadi tidak ter-decode). */
+export const USDG_PRICE_UNAVAILABLE = "Live prices are unavailable right now (market closed or a price feed is stale), so redeeming to USDG is not possible. Redeem in-kind instead.";

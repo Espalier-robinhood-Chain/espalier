@@ -17,6 +17,10 @@ export type CordonErrorName =
   | "LengthMismatch"
   | "PriceUnavailable"
   | "ZeroAddress"
+  /** `redeemToUsdg` dipanggil padahal vault belum punya venue. */
+  | "VenueNotSet"
+  /** USDG yang diterima kurang dari `minUsdg` (harga venue bergeser). */
+  | "UsdgSlippage"
   /** Error OpenZeppelin yang bocor dari token/vault saat `transferFrom` (tidak menyebut token mana). */
   | "ERC20InsufficientAllowance"
   | "ERC20InsufficientBalance"
@@ -32,7 +36,7 @@ export interface CordonError {
 
 const KNOWN = new Set<string>([
   "ZeroAmount", "SlippageExceeded", "ShortReceipt", "NotSeeded", "AssetPaused",
-  "InvalidMask", "LengthMismatch", "PriceUnavailable", "ZeroAddress",
+  "InvalidMask", "LengthMismatch", "PriceUnavailable", "ZeroAddress", "VenueNotSet", "UsdgSlippage",
   "ERC20InsufficientAllowance", "ERC20InsufficientBalance",
 ]);
 
@@ -130,6 +134,51 @@ export async function quoteRedeem(client: PublicClient, vault: Address, shares: 
     client.readContract({ ...base, functionName: "feeOnRedeem", args: [shares] }),
   ]);
   return { shares, amounts, feeShares };
+}
+
+/** Venue USDG yang terpasang di vault (`setExecutionVenue`). null = fitur "redeem ke USDG" belum aktif untuk vault ini. */
+export interface UsdgVenue {
+  venue: Address;
+  usdg: Address;
+}
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+/**
+ * Baca venue dan token USDG vault. null bila belum dipasang, atau bila vault adalah kontrak lama tanpa
+ * `executionVenue()` (panggilan gagal): keduanya berarti "To USDG" tidak tersedia. Tidak pernah melempar.
+ */
+export async function readUsdgVenue(client: PublicClient, vault: Address): Promise<UsdgVenue | null> {
+  const base = { address: vault, abi: cordonVaultAbi } as const;
+  try {
+    const [venue, usdg] = await Promise.all([
+      client.readContract({ ...base, functionName: "executionVenue" }),
+      client.readContract({ ...base, functionName: "usdgToken" }),
+    ]);
+    if (venue === ZERO_ADDRESS || usdg === ZERO_ADDRESS) return null;
+    return { venue, usdg };
+  } catch {
+    return null;
+  }
+}
+
+export interface UsdgRedeemQuote extends RedeemQuote {
+  /** USDG (satuan token USDG) yang diterima bila dijual sekarang. */
+  usdgOut: bigint;
+}
+
+/**
+ * Kuotasi redeem ke USDG. Revert (dilempar) bila harga live tidak tersedia (pasar tutup, harga basi, aset dijeda)
+ * atau venue belum dipasang; panggil hanya bila `readUsdgVenue` bukan null, dan tangani galatnya sebagai "harga tidak tersedia".
+ */
+export async function quoteRedeemToUsdg(client: PublicClient, vault: Address, shares: bigint): Promise<UsdgRedeemQuote> {
+  const base = { address: vault, abi: cordonVaultAbi } as const;
+  const [usdgOut, amounts, feeShares] = await Promise.all([
+    client.readContract({ ...base, functionName: "previewRedeemToUsdg", args: [shares] }),
+    client.readContract({ ...base, functionName: "previewRedeem", args: [shares] }),
+    client.readContract({ ...base, functionName: "feeOnRedeem", args: [shares] }),
+  ]);
+  return { shares, amounts, feeShares, usdgOut };
 }
 
 export interface NavReading {
