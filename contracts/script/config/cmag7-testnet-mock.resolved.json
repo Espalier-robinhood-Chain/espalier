@@ -1,0 +1,105 @@
+{
+  "_note": "Cordon cMAG7 (7 saham besar) BARU di Robinhood Chain Testnet 46630: vault pengganti yang punya redeemToUsdg. Memakai OracleRouter dan ketujuh token + feed mock yang SUDAH ada dari deploy B1 (token diisi otomatis oleh deploy-cmag7.sh dari deployments/robinhood-testnet-mock-live.json). Tidak ada token atau feed baru. Pengirim harus ADMIN OracleRouter (espalier-owner).",
+  "name": "cmag7-testnet-mock",
+  "chainId": 46630,
+  "router": "0x7918Be51162b742DE19d666B88AB5Af134B6Cd0e",
+  "owner": "0xE0bf53F10B12bcd19A979C698809750f34512f47",
+  "cordon": {
+    "name": "Espalier Cordon MAG7",
+    "symbol": "cMAG7"
+  },
+  "fees": {
+    "_note": "Fee uji untuk rehearsal (10/10/50 bps) agar jalur fee ikut teruji. Batas hardcode kontrak: 100/100/200 bps.",
+    "mintBps": 10,
+    "redeemBps": 10,
+    "managementBps": 50,
+    "recipient": "0xE0bf53F10B12bcd19A979C698809750f34512f47"
+  },
+  "seed": {
+    "_note": "Seed hanya murah SEBELUM serah-terima ADMIN (deployer harus memegang token). amounts = string jumlah mentah per aset, urutan sama dengan assets. shares minimal 1e18.",
+    "enabled": true,
+    "to": "0xE0bf53F10B12bcd19A979C698809750f34512f47",
+    "shares": "1000000000000000000000",
+    "amounts": [
+      "10000000000000000000",
+      "10000000000000000000",
+      "10000000000000000000",
+      "10000000000000000000",
+      "10000000000000000000",
+      "10000000000000000000",
+      "10000000000000000000"
+    ]
+  },
+  "assets": [
+    {
+      "symbol": "AAPL",
+      "token": "0xB6542d1BC2C741e8441d285d37787b657ABA1d8f",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": false,
+      "targetBps": 1429,
+      "mockPriceE8": 25000000000
+    },
+    {
+      "symbol": "MSFT",
+      "token": "0x755C550a32041a49396aEc6D83D54De7F7cdAbc0",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": false,
+      "targetBps": 1429,
+      "mockPriceE8": 45000000000
+    },
+    {
+      "symbol": "GOOGL",
+      "token": "0x8eD4FfF5eF3c23d34dcf95b2fe0224bcf50993D8",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": false,
+      "targetBps": 1429,
+      "mockPriceE8": 18000000000
+    },
+    {
+      "symbol": "AMZN",
+      "token": "0x0166c21d85D69D2E421Ab200d65378Cf755Ed7a2",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": false,
+      "targetBps": 1429,
+      "mockPriceE8": 22000000000
+    },
+    {
+      "symbol": "NVDA",
+      "token": "0xd7F0Eccb089280156c454fe3AD9aF924c40f6BD2",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": false,
+      "targetBps": 1429,
+      "mockPriceE8": 14000000000
+    },
+    {
+      "symbol": "META",
+      "token": "0x56Ba011C358aA07B8132c94B4A1ae0c92DfbC790",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": false,
+      "targetBps": 1429,
+      "mockPriceE8": 65000000000
+    },
+    {
+      "symbol": "TSLA",
+      "token": "0xb4aAe788721e8b223b1e01779A453577e03fB1eC",
+      "stalenessRegularSeconds": 900,
+      "stalenessExtendedSeconds": 1800,
+      "stalenessOvernightSeconds": 3600,
+      "checkOraclePause": false,
+      "targetBps": 1426,
+      "mockPriceE8": 30000000000
+    }
+  ]
+}
