@@ -91,7 +91,7 @@ Belum diuji di jaringan: kode ini ditulis tanpa `npm install` (registry diblokir
 `indexer/` = server terpisah yang mengisi `positions` dan `nav_points` dari event `CordonVault`. Terapkan `supabase/migrations/0006_indexer_state.sql`. Detail dan batasan: `indexer/README.md`.
 
 ## Keeper pruning (tahap 4, off-chain saja)
-`keeper/` = perencana dan siklus keeper, mode dry-run saja (kontrak belum punya `prune`). Detail dan daftar sisa pekerjaan: `keeper/README.md`.
+`keeper/` = perencana dan siklus keeper, dry-run (default) dan live (`CordonVault.prune`). Detail dan daftar sisa pekerjaan: `keeper/README.md`.
 
 ## Graft Vault (cash-secured put) ikut berjalan
 

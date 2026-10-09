@@ -10,6 +10,8 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IOracleRouter} from "./interfaces/IOracleRouter.sol";
 import {IExecutionVenue} from "./interfaces/IExecutionVenue.sol";
+import {IPruneVenue} from "./interfaces/IPruneVenue.sol";
+import {Roles} from "./libraries/Roles.sol";
 
 /// @title CordonVault
 /// @notice Basket Stock Token (mis. cMAG7). Share ERC-20 adalah klaim proporsional atas saldo semua komponen.
@@ -36,8 +38,17 @@ import {IExecutionVenue} from "./interfaces/IExecutionVenue.sol";
 ///        dijeda. `redeem` TIDAK PERNAH ditutup oleh peran mana pun (keluar in-kind tidak butuh oracle).
 ///      Redeem ke USDG (`redeemToUsdg`) memakai `IExecutionVenue` yang dipasang ADMIN lewat `setExecutionVenue`; mati
 ///      (VenueNotSet) sampai venue dipasang. Untuk mainnet perlu venue DEX sungguhan (riset likuiditas, Fase 0 item 5).
-///      BELUM ADA (item lain): mint lewat USDG, Pruning dan peran KEEPER di vault ini (Fase 3).
-///      Bobot target hanya informasi (dipakai UI dan Pruning nanti); komposisi sebenarnya mengikuti saldo.
+///      Pruning (`prune`, peran KEEPER): mengembalikan komposisi ke bobot target lewat `IPruneVenue` yang dipasang ADMIN.
+///      Keeper hanya memilih pasangan token dan jumlah; keamanannya dipaksa di kontrak, bukan dipercayakan ke keeper:
+///        - hanya saat SEMUA komponen punya harga LIVE (pasar buka, harga segar, tidak dijeda);
+///        - tiap swap harus menghasilkan >= nilai oracle dikurangi `pruneSlippageBps` (diukur dari saldo yang benar-benar
+///          masuk, bukan dari angka venue), dan keeper boleh menuntut lebih ketat lewat `minOut`;
+///        - drift maksimum sesudah HARUS lebih kecil daripada sebelum (strict), jadi trade yang tidak memperbaiki ditolak;
+///        - jarak antar pruning minimal `MIN_PRUNE_INTERVAL`, supaya kunci keeper yang bocor tidak bisa menguras
+///          vault lewat putaran trade berulang (kerugian terbatas pada slippage yang diizinkan x nilai yang diputar).
+///      Mati (`PruneNotConfigured`) sampai ADMIN memasang venue DAN `pruneSlippageBps` > 0.
+///      BELUM ADA (item lain): mint lewat USDG (Fase 3).
+///      Bobot target dipakai UI dan Pruning; komposisi sebenarnya mengikuti saldo.
 contract CordonVault is ERC20, AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -51,6 +62,11 @@ contract CordonVault is ERC20, AccessControl, ReentrancyGuard {
     uint16 public constant MAX_REDEEM_FEE_BPS = 100; // 1,00% dari share yang ditebus
     uint16 public constant MAX_MANAGEMENT_FEE_BPS = 200; // 2,00% per tahun
     uint256 public constant YEAR = 365 days;
+
+    /// Batas atas hardcode slippage pruning (bps terhadap harga oracle). USULAN, belum disetujui; ADMIN tidak bisa melewatinya.
+    uint16 public constant MAX_PRUNE_SLIPPAGE_BPS = 300;
+    /// Jarak minimum antar pruning (hardcode). Jadwal sebenarnya (bulanan) dijaga keeper; ini hanya pagar kontrak.
+    uint256 public constant MIN_PRUNE_INTERVAL = 1 days;
     /// Waktu maksimum yang diakru dalam satu sentuhan (jaga pembagi tetap positif); lebih lama = fee terkurangi.
     uint256 public constant MAX_ACCRUAL_PERIOD = 5 * 365 days;
 
@@ -68,6 +84,13 @@ contract CordonVault is ERC20, AccessControl, ReentrancyGuard {
     IExecutionVenue public executionVenue;
     /// USDG milik venue yang terpasang (0 bila tidak ada venue).
     address public usdgToken;
+
+    /// Venue untuk pruning (`prune`). address(0) = pruning mati.
+    IPruneVenue public pruneVenue;
+    /// Slippage maksimum tiap swap pruning terhadap harga oracle live (bps). 0 = pruning mati.
+    uint16 public pruneSlippageBps;
+    /// Waktu pruning terakhir (0 = belum pernah).
+    uint256 public lastPrune;
 
     address[] private _components;
     uint8[] private _decimals;
@@ -88,6 +111,13 @@ contract CordonVault is ERC20, AccessControl, ReentrancyGuard {
         address indexed by, address indexed to, uint256 shares, uint256 feeShares, uint256 usdgOut, uint256[] amounts
     );
     event ManagementFeeAccrued(address indexed recipient, uint256 shares);
+    /// Venue pruning dipasang atau dimatikan (venue = 0 berarti mati).
+    event PruneVenueSet(address indexed venue);
+    event PruneSlippageSet(uint16 bps);
+    /// Satu swap pruning: yang benar-benar keluar dan masuk menurut saldo vault.
+    event PruneSwap(address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut);
+    /// Satu pruning selesai. Drift = selisih terbesar bobot sebenarnya dan target (bps), pada harga live.
+    event Pruned(uint256 driftBeforeBps, uint256 driftAfterBps, uint256 trades);
 
     error ZeroAddress();
     error InvalidComponents();
@@ -111,6 +141,19 @@ contract CordonVault is ERC20, AccessControl, ReentrancyGuard {
     error InvalidVenue();
     /// USDG yang diterima kurang dari `minimum`.
     error UsdgSlippage(uint256 received, uint256 minimum);
+    /// `prune` dipanggil padahal venue pruning atau slippage pruning belum diatur ADMIN.
+    error PruneNotConfigured();
+    /// Venue pruning tidak valid: bukan kontrak atau vault sendiri.
+    error InvalidPruneVenue();
+    error InvalidTrade(uint256 index);
+    /// Pruning terakhir terlalu baru; boleh lagi pada `nextAt`.
+    error PruneTooSoon(uint256 nextAt);
+    /// Venue tidak menarik tepat `amountIn` dari komponen yang dijual.
+    error PruneShortSpend(uint256 index, uint256 spent, uint256 expected);
+    /// Hasil swap kurang dari batas: nilai oracle - slippage kontrak, atau `minOut` dari keeper (mana yang lebih ketat).
+    error PruneSlippageExceeded(uint256 index, uint256 received, uint256 minimum);
+    /// Drift maksimum sesudah pruning tidak lebih kecil daripada sebelum.
+    error DriftNotReduced(uint256 beforeBps, uint256 afterBps);
 
     constructor(
         address admin,
@@ -263,6 +306,23 @@ contract CordonVault is ERC20, AccessControl, ReentrancyGuard {
         navPerShareE18 = s == 0 ? 0 : Math.mulDiv(totalValueE18, 1e18, s);
     }
 
+    /// Drift maksimum (bps) antara bobot sebenarnya dan bobot target pada harga LIVE. ok = false bila ada komponen
+    /// tanpa harga live (pasar tutup, basi, dijeda) atau vault kosong; jangan dipakai untuk keputusan saat itu.
+    function tryDriftBps() external view returns (bool ok, uint256 driftBps) {
+        uint256 n = _components.length;
+        uint256[] memory prices = new uint256[](n);
+        for (uint256 i; i < n; ++i) {
+            (IOracleRouter.Status st, uint256 price,) = ROUTER.tryGetPrice(_components[i]);
+            if (st != IOracleRouter.Status.Ok) return (false, 0);
+            prices[i] = price;
+        }
+        uint256 total;
+        uint256[] memory vals;
+        (vals, total) = _values(prices);
+        if (total == 0) return (false, 0);
+        return (true, _drift(vals, total));
+    }
+
     // ----------------------------------------------------------------- aksi
 
     /// Deposit awal treasury; hanya saat supply 0. Menentukan satuan share (jumlah share bebas, min `MIN_SEED_SHARES`).
@@ -405,6 +465,117 @@ contract CordonVault is ERC20, AccessControl, ReentrancyGuard {
         executionVenue = IExecutionVenue(venue);
         usdgToken = usdg;
         emit ExecutionVenueSet(venue, usdg);
+    }
+
+    // ---------------------------------------------------------------- pruning
+
+    /// Satu swap pruning. `tokenIn`/`tokenOut` = indeks komponen (urutan `components()`).
+    /// `minOut` = batas minimum dari keeper (boleh 0); batas kontrak dari oracle tetap berlaku.
+    struct PruneTrade {
+        uint256 tokenIn;
+        uint256 tokenOut;
+        uint256 amountIn;
+        uint256 minOut;
+    }
+
+    /// Kembalikan komposisi ke bobot target. Hanya KEEPER. Lihat catatan kontrak untuk pagar yang dipaksa di sini.
+    function prune(PruneTrade[] calldata trades) external onlyRole(Roles.KEEPER_ROLE) nonReentrant {
+        IPruneVenue venue = pruneVenue;
+        uint16 slip = pruneSlippageBps;
+        if (address(venue) == address(0) || slip == 0) revert PruneNotConfigured();
+        uint256 n = _components.length;
+        if (trades.length == 0 || trades.length > MAX_COMPONENTS) revert InvalidTrade(trades.length);
+        if (totalSupply() == 0) revert NotSeeded();
+        uint256 last = lastPrune;
+        if (last != 0 && block.timestamp < last + MIN_PRUNE_INTERVAL) revert PruneTooSoon(last + MIN_PRUNE_INTERVAL);
+
+        uint256[] memory prices = new uint256[](n);
+        for (uint256 i; i < n; ++i) {
+            (IOracleRouter.Status st, uint256 price,) = ROUTER.tryGetPrice(_components[i]);
+            if (st != IOracleRouter.Status.Ok) revert PriceUnavailable(i, st);
+            prices[i] = price;
+        }
+        (uint256[] memory vals, uint256 total) = _values(prices);
+        uint256 driftBefore = _drift(vals, total);
+
+        for (uint256 k; k < trades.length; ++k) {
+            _pruneSwap(k, trades[k], venue, slip, prices);
+        }
+
+        (vals, total) = _values(prices);
+        uint256 driftAfter = _drift(vals, total);
+        if (driftAfter >= driftBefore) revert DriftNotReduced(driftBefore, driftAfter);
+        lastPrune = block.timestamp;
+        emit Pruned(driftBefore, driftAfter, trades.length);
+    }
+
+    function _pruneSwap(uint256 k, PruneTrade calldata t, IPruneVenue venue, uint16 slip, uint256[] memory prices)
+        internal
+    {
+        uint256 n = _components.length;
+        if (t.tokenIn >= n || t.tokenOut >= n || t.tokenIn == t.tokenOut || t.amountIn == 0) revert InvalidTrade(k);
+        IERC20 tin = IERC20(_components[t.tokenIn]);
+        IERC20 tout = IERC20(_components[t.tokenOut]);
+
+        // Batas dari oracle: nilai yang dijual (harga live) dikurangi slippage kontrak, dalam satuan tokenOut.
+        uint256 expected = Math.mulDiv(
+            t.amountIn * prices[t.tokenIn], 10 ** _decimals[t.tokenOut], prices[t.tokenOut] * 10 ** _decimals[t.tokenIn]
+        );
+        uint256 floor = Math.mulDiv(expected, BPS - slip, BPS);
+        uint256 minOut = t.minOut > floor ? t.minOut : floor;
+
+        uint256 inBefore = tin.balanceOf(address(this));
+        uint256 outBefore = tout.balanceOf(address(this));
+        if (t.amountIn > inBefore) revert InvalidTrade(k);
+        tin.forceApprove(address(venue), t.amountIn);
+        venue.swap(address(tin), address(tout), t.amountIn, minOut, address(this));
+        tin.forceApprove(address(venue), 0); // bersihkan sisa allowance
+        uint256 spent = inBefore - tin.balanceOf(address(this));
+        uint256 received = tout.balanceOf(address(this)) - outBefore;
+
+        if (spent != t.amountIn) revert PruneShortSpend(k, spent, t.amountIn);
+        if (received < minOut) revert PruneSlippageExceeded(k, received, minOut);
+        emit PruneSwap(address(tin), address(tout), spent, received);
+    }
+
+    /// Nilai USD (18 desimal) tiap komponen dengan harga `prices` dan totalnya.
+    function _values(uint256[] memory prices) internal view returns (uint256[] memory vals, uint256 total) {
+        uint256 n = _components.length;
+        vals = new uint256[](n);
+        for (uint256 i; i < n; ++i) {
+            uint256 bal = IERC20(_components[i]).balanceOf(address(this));
+            vals[i] = Math.mulDiv(bal, prices[i], 10 ** _decimals[i]);
+            total += vals[i];
+        }
+    }
+
+    /// Selisih terbesar (bps) bobot sebenarnya (dibulatkan ke terdekat) dan target; sama dengan `maxDriftBps` keeper.
+    /// Vault dengan nilai 0: 0.
+    function _drift(uint256[] memory vals, uint256 total) internal view returns (uint256 maxDrift) {
+        if (total == 0) return 0;
+        uint256 n = vals.length;
+        for (uint256 i; i < n; ++i) {
+            uint256 w = (vals[i] * BPS * 2 + total) / (total * 2);
+            uint256 target = _targetBps[i];
+            uint256 d = w > target ? w - target : target - w;
+            if (d > maxDrift) maxDrift = d;
+        }
+    }
+
+    // ------------------------------------------------------------ admin pruning
+
+    /// Pasang venue pruning (atau matikan dengan address(0)). Venue harus kontrak dan bukan vault ini.
+    function setPruneVenue(address venue) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant {
+        if (venue != address(0) && (venue == address(this) || venue.code.length == 0)) revert InvalidPruneVenue();
+        pruneVenue = IPruneVenue(venue);
+        emit PruneVenueSet(venue);
+    }
+
+    /// Atur slippage maksimum pruning (<= `MAX_PRUNE_SLIPPAGE_BPS`). 0 mematikan pruning.
+    function setPruneSlippageBps(uint16 bps) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant {
+        if (bps > MAX_PRUNE_SLIPPAGE_BPS) revert FeeTooHigh();
+        pruneSlippageBps = bps;
+        emit PruneSlippageSet(bps);
     }
 
     // ------------------------------------------------------------ admin fee

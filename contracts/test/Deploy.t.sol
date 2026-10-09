@@ -322,10 +322,27 @@ contract DeployTest is Test {
         r.router.pauseAsset(tokens[1]);
     }
 
+    function test_keeperGetsPruneRoleOnCordon_butCannotConfigurePruning() public {
+        P memory p = _base();
+        p.keeper = keeper;
+        Deploy.Result memory r = _deploy(p);
+        assertTrue(r.vault.hasRole(Roles.KEEPER_ROLE, keeper));
+        // Pruning mati sampai ADMIN (timelock) memasang venue dan slippage; KEEPER tidak bisa mengaturnya sendiri.
+        assertEq(address(r.vault.pruneVenue()), address(0));
+        assertEq(r.vault.pruneSlippageBps(), 0);
+        vm.prank(keeper);
+        vm.expectRevert();
+        r.vault.setPruneVenue(address(r.router));
+        vm.prank(keeper);
+        vm.expectRevert();
+        r.vault.setPruneSlippageBps(50);
+    }
+
     function test_unsetGuardianAndKeeper_grantNothing() public {
         Deploy.Result memory r = _deploy(_base());
         assertFalse(r.router.hasRole(Roles.GUARDIAN_ROLE, address(0)));
         assertFalse(r.session.hasRole(Roles.KEEPER_ROLE, address(0)));
+        assertFalse(r.vault.hasRole(Roles.KEEPER_ROLE, address(0)));
     }
 
     function test_feesAreAppliedWhenConfigured() public {

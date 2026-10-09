@@ -1,6 +1,6 @@
 # Keeper pruning (tahap 4, bagian off-chain)
 
-Pruning = mengembalikan komposisi `CordonVault` ke bobot target, bulanan, hanya saat harga live. Folder ini berisi otak keeper; **jalur transaksi on-chain belum ada**, jadi satu-satunya mode saat ini adalah `dry-run`.
+Pruning = mengembalikan komposisi `CordonVault` ke bobot target, bulanan, hanya saat harga live. Folder ini berisi otak keeper; **mode default `dry-run`; `live` lihat bagian di bawah.
 
 ## Yang sudah ada (dites, `npm test`: 11 tes)
 - `src/plan.ts` (murni, bigint): `maxDriftBps`, `planTrades` (jual yang berlebih, beli yang kurang, cocokkan terbesar dulu, lewati debu `MIN_TRADE_USD`, `minOut` = harga oracle - slippage, tidak pernah menjual melebihi saldo, desimal token berbeda), `decide` (harga live, interval `MIN_INTERVAL_DAYS` = 30, drift >= `DRIFT_THRESHOLD_BPS` = 100).
@@ -10,12 +10,18 @@ Pruning = mengembalikan komposisi `CordonVault` ke bobot target, bulanan, hanya 
 ## Aturan integritas data
 - **Dry-run tidak menulis apa pun ke database** (tidak ke `prunings`, tidak ke `keeper_runs`), supaya riwayat publik tidak berisi pruning yang tidak pernah terjadi dan poll berkala tidak menumpuk baris.
 - Baris `prunings` hanya ditulis setelah transaksi terkonfirmasi, dengan drift "sesudah" dibaca ulang dari chain. Bila harga tidak live setelah transaksi, run dicatat `failed` (dengan hash), bukan angka karangan.
-- `KEEPER_MODE=live` ditolak saat start sampai jalur on-chain ada.
+- `KEEPER_MODE=live` butuh `KEEPER_PRIVATE_KEY`; tanpa itu keeper menolak start.
 
-## Yang masih dibutuhkan untuk mode live (belum dikerjakan)
-1. **Kontrak**: fungsi `prune(...)` di `CordonVault` dengan `KEEPER_ROLE` (sudah disiapkan di `Roles.sol`). Pertimbangan desain: adapter DEX yang di-allowlist ADMIN (DEX belum diputuskan; data likuiditas dari DexScreener), `minOut` dipaksa dari harga oracle `getPrice` + batas slippage di kontrak (jangan percaya `minOut` dari keeper), hanya saat harga live, drift sesudah <= sebelum, event `Pruned(driftBefore, driftAfter, trades)` supaya indexer bisa membangun ulang `prunings` dari event. Perlu forge dan tes fork; di lingkungan penulisan tidak ada `forge`/`solc`, jadi tidak ditulis.
-2. `Executor` live di keeper yang memanggil fungsi itu (ABI akan ikut `gen-abis`), lalu ubah penolakan `KEEPER_MODE=live` di `config.ts`.
-3. Saat event `Pruned` ada, pindahkan penulisan `prunings` ke indexer (sumber kebenaran = event) dan biarkan keeper hanya mengeksekusi.
+## Mode live (`KEEPER_MODE=live`)
+Kontrak: `CordonVault.prune(PruneTrade[])`, hanya `KEEPER_ROLE`. Keeper memilih pasangan token dan jumlah; kontrak memaksa: semua harga LIVE, tiap swap >= nilai oracle - `pruneSlippageBps` (diukur dari saldo yang benar-benar masuk), `minOut` keeper boleh lebih ketat, drift sesudah < sebelum (strict), jarak antar pruning >= 1 hari. Event `Pruned(driftBefore, driftAfter, trades)` dan `PruneSwap`.
+
+Syarat sebelum live (semua di luar keeper):
+1. CordonVault yang ADA `prune()` (deploy ulang; vault lama tidak punya fungsi ini).
+2. ADMIN (timelock) memanggil `setPruneVenue(<adapter DEX>)` dan `setPruneSlippageBps(<=300)`. Selama salah satunya kosong, `prune` revert `PruneNotConfigured` dan keeper berhenti dengan pesan jelas.
+3. Adapter DEX yang mengimplementasikan `IPruneVenue.swap` (belum ada selain `MockPruneVenue` untuk uji).
+4. Akun dari `KEEPER_PRIVATE_KEY` punya `KEEPER_ROLE` di CordonVault (deploy script memberikannya ke `admin.keeper`). Dicek saat start.
+
+Alur live: simulasi (`eth_call`) -> kirim -> tunggu receipt -> baca ulang drift dari chain -> tulis `prunings`. Dry-run tetap tidak menulis apa pun.
 
 ## Menjalankan (dry-run)
 ```bash
@@ -28,7 +34,7 @@ Butuh baris `cordons` (indexer sudah jalan). Kunci service role hanya untuk serv
 `src/rounds.ts`: `strikeFor` (persen tetap OTM, pembulatan menjauh dari harga), `canTransition` (status round), `nextRoundAction` (roll / settle / wait). Dites (16 tes total). Belum terhubung ke kontrak karena SpurVault/HarvestAuction belum ada; lihat `contracts/SPEC-tahap5.md`.
 
 ## Keeper Spur (tahap 7)
-Opsional: aktif bila `SPUR_VAULT_ADDRESS` diisi. Kode: `spur-plan.ts` (murni), `spur-run.ts` (satu siklus), `spur-adapters.ts` (viem, RFQ HTTP, `keeper_runs`), `spur-abi.ts`. Jalur ini terpisah dari pruning Cordon: galat di satu tidak menghentikan yang lain, dan `KEEPER_MODE` Cordon tetap hanya `dry-run`.
+Opsional: aktif bila `SPUR_VAULT_ADDRESS` diisi. Kode: `spur-plan.ts` (murni), `spur-run.ts` (satu siklus), `spur-adapters.ts` (viem, RFQ HTTP, `keeper_runs`), `spur-abi.ts`. Jalur ini terpisah dari pruning Cordon: galat di satu tidak menghentikan yang lain, dan `KEEPER_MODE` Cordon diatur sendiri.
 
 **Keadaan dibaca dari chain, bukan database.** Satu siklus memilih tepat satu langkah:
 
@@ -58,4 +64,3 @@ Keputusan harga tidak ada di keeper: strike dihitung kontrak dari oracle, harga 
 - Layanan RFQ dan kebijakan harga Picker.
 - Dua jalur yang belum diuji ujung-ke-ujung: `settleFallback` (hanya dites dengan tiruan) dan roll saat pasar tutup (kontrak yang menolak; keeper hanya melaporkan).
 - Tidak ada peringatan/alert selain log; `DITAHAN` yang berulang berhari-hari perlu dipantau manusia.
-- Cordon pruning masih dry-run (kontrak belum punya fungsi pruning).

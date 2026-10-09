@@ -426,7 +426,10 @@ contract Deploy is Script {
         }
 
         if (c.guardian != address(0)) r.router.grantRole(Roles.GUARDIAN_ROLE, c.guardian);
-        if (c.keeper != address(0)) r.session.grantRole(Roles.KEEPER_ROLE, c.keeper);
+        if (c.keeper != address(0)) {
+            r.session.grantRole(Roles.KEEPER_ROLE, c.keeper);
+            r.vault.grantRole(Roles.KEEPER_ROLE, c.keeper); // pruning Cordon; venue dan slippage tetap ADMIN (timelock)
+        }
 
         if (c.feeRecipient != address(0)) r.vault.setFeeRecipient(c.feeRecipient);
         if ((c.mintFeeBps | c.redeemFeeBps | c.managementFeeBps) != 0) {
@@ -593,7 +596,10 @@ contract Deploy is Script {
         if (c.guardian != address(0)) {
             require(r.router.hasRole(Roles.GUARDIAN_ROLE, c.guardian), "verify: GUARDIAN");
         }
-        if (c.keeper != address(0)) require(r.session.hasRole(Roles.KEEPER_ROLE, c.keeper), "verify: KEEPER");
+        if (c.keeper != address(0)) {
+            require(r.session.hasRole(Roles.KEEPER_ROLE, c.keeper), "verify: KEEPER");
+            require(r.vault.hasRole(Roles.KEEPER_ROLE, c.keeper), "verify: KEEPER (cordon)");
+        }
 
         if (c.seedEnabled) {
             require(r.vault.totalSupply() == c.seedShares, "verify: supply seed");
