@@ -28,7 +28,9 @@ Alur live: simulasi (`eth_call`) -> kirim -> tunggu receipt -> baca ulang drift 
 cd keeper && npm install && npm test
 cp .env.example .env     # isi; jalankan: node --env-file=.env --experimental-strip-types src/main.ts
 ```
-Butuh baris `cordons` (indexer sudah jalan). Kunci service role hanya untuk server ini. Kode adapter belum dijalankan terhadap RPC/Supabase sungguhan.
+Butuh baris `cordons` (indexer sudah jalan).
+
+**Banyak Cordon.** Keeper merawat semua Cordon dalam satu proses: `CORDON_VAULT_ADDRESS` (utama) + `EXTRA_CORDONS=0xcCHIP,0xcVOLT` (dipisah koma; format indexer `0xalamat@blok` juga diterima, bagian `@blok` diabaikan). Tiap Cordon punya jalur sendiri, jadi galat di satu Cordon tidak menghentikan yang lain; transaksi dikirim berurutan. Di mode live, kunci keeper wajib punya `KEEPER_ROLE` di SEMUA Cordon, kalau tidak keeper menolak start. Baris `keeper_runs` memakai `job = prune:<simbol>` (mis. `prune:cCHIP`) karena tabelnya tidak punya kolom cordon. Kunci service role hanya untuk server ini. Kode adapter belum dijalankan terhadap RPC/Supabase sungguhan.
 
 ## Round mingguan (tahap 5, perencana saja)
 `src/rounds.ts`: `strikeFor` (persen tetap OTM, pembulatan menjauh dari harga), `canTransition` (status round), `nextRoundAction` (roll / settle / wait). Dites (16 tes total). Belum terhubung ke kontrak karena SpurVault/HarvestAuction belum ada; lihat `contracts/SPEC-tahap5.md`.

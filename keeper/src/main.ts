@@ -1,4 +1,4 @@
-import { createKeeperChain, createKeeperStore, createLiveExecutor, dryRunExecutor } from "./adapters.ts";
+import { createKeeperChain, createKeeperStore, createLiveExecutor, dryRunExecutor, readCordonLabel } from "./adapters.ts";
 import { loadConfig } from "./config.ts";
 import { runOnce } from "./run.ts";
 import { createHttpQuoteSource, createSpurRuntime, createSpurStore } from "./spur-adapters.ts";
@@ -7,11 +7,22 @@ import { runSpurOnce, type SpurOutcome } from "./spur-run.ts";
 const log = (m: string, x?: unknown) => console.log(`${new Date().toISOString()} ${m}`, x ?? "");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const cfg = loadConfig(process.env);
-const chain = await createKeeperChain(cfg.rpcUrl, cfg.vault, cfg.chainId);
-const exec = cfg.mode === "live" ? await createLiveExecutor(cfg.rpcUrl, cfg.vault, cfg.chainId, cfg.privateKey!) : dryRunExecutor;
-const store = createKeeperStore(cfg.supabaseUrl, cfg.serviceKey, cfg.vault);
 const kc = { thresholdBps: cfg.thresholdBps, minIntervalDays: cfg.minIntervalDays, slippageBps: cfg.slippageBps, minTradeUsdE18: BigInt(cfg.minTradeUsd) * 10n ** 18n, maxTrades: cfg.maxTrades };
-log(`keeper siap (mode ${cfg.mode}) untuk ${cfg.vault}`);
+
+// Semua Cordon (CORDON_VAULT_ADDRESS + EXTRA_CORDONS) dirawat satu per satu dalam satu proses, satu kunci keeper.
+// Penyiapan gagal keras (RPC salah chain, kunci tanpa KEEPER_ROLE di salah satu vault): lebih baik mati daripada jalan separuh.
+// Transaksi dikirim berurutan dan ditunggu receipt-nya, jadi satu kunci tidak menabrak nonce sendiri.
+type CordonLane = { label: string; vault: `0x${string}`; chain: Awaited<ReturnType<typeof createKeeperChain>>; exec: Awaited<ReturnType<typeof createLiveExecutor>>; store: ReturnType<typeof createKeeperStore>; lastKey: string };
+const cordonLanes: CordonLane[] = [];
+for (const vault of cfg.cordons) {
+  const label = await readCordonLabel(cfg.rpcUrl, vault);
+  const chain = await createKeeperChain(cfg.rpcUrl, vault, cfg.chainId);
+  const exec = cfg.mode === "live" ? await createLiveExecutor(cfg.rpcUrl, vault, cfg.chainId, cfg.privateKey!) : dryRunExecutor;
+  const store = createKeeperStore(cfg.supabaseUrl, cfg.serviceKey, vault, label);
+  cordonLanes.push({ label, vault, chain, exec, store, lastKey: "" });
+  log(`keeper ${label} siap (mode ${cfg.mode}) untuk ${vault}`);
+}
+log(`keeper merawat ${cordonLanes.length} Cordon: ${cordonLanes.map((l) => l.label).join(", ")}`);
 
 // Spur dan Graft (opsional): masing-masing jalur sendiri; galat di satu jalur tidak menghentikan Cordon atau vault lain.
 // Keduanya memakai kode keeper yang sama (GraftVault mencerminkan SpurVault); RFQ dan kunci keeper dipakai bersama.
@@ -40,13 +51,19 @@ const laneLog = (name: string, o: SpurOutcome) => {
 let stop = false;
 for (const s of ["SIGINT", "SIGTERM"] as const) process.on(s, () => { stop = true; });
 while (!stop) {
-  try {
-    const o = await runOnce(chain, exec, store, kc);
-    if (o.kind === "dry-run") log(`DRY-RUN: drift ${o.driftBps} bps, rencana ${o.trades.length} trade (tidak dikirim)`, o.trades.map((t) => ({ in: t.tokenIn, out: t.tokenOut, amountIn: String(t.amountIn), minOut: String(t.minOut) })));
-    else if (o.kind === "skipped") log(`lewati: ${o.reason}`);
-    else if (o.kind === "failed") log(`GAGAL: ${o.error}`);
-    else log(`pruning ${o.txHash}: drift ${o.before} -> ${o.after} bps`);
-  } catch (e) { log("galat:", e instanceof Error ? e.message : e); }
+  // Tiap Cordon punya jalur sendiri: galat atau "belum ada di database" pada satu Cordon tidak menghentikan yang lain.
+  for (const lane of cordonLanes) {
+    try {
+      const o = await runOnce(lane.chain, lane.exec, lane.store, kc);
+      // Status menunggu yang sama berturut-turut dicatat sekali saja supaya log poll tidak membanjir (3 Cordon x tiap menit).
+      const key = o.kind === "skipped" ? `skipped:${o.reason}` : "";
+      if (o.kind === "dry-run") log(`${lane.label} DRY-RUN: drift ${o.driftBps} bps, rencana ${o.trades.length} trade (tidak dikirim)`, o.trades.map((t) => ({ in: t.tokenIn, out: t.tokenOut, amountIn: String(t.amountIn), minOut: String(t.minOut) })));
+      else if (o.kind === "skipped") { if (key !== lane.lastKey) log(`${lane.label} lewati: ${o.reason}`); }
+      else if (o.kind === "failed") log(`${lane.label} GAGAL: ${o.error}`);
+      else log(`${lane.label} pruning ${o.txHash}: drift ${o.before} -> ${o.after} bps`);
+      lane.lastKey = key;
+    } catch (e) { log(`galat ${lane.label}:`, e instanceof Error ? e.message : e); }
+  }
   if (spurStore) for (const lane of lanes) {
     try {
       const o = await runSpurOnce(lane.rt.chain, lane.rt.executor, rfq, spurStore);
