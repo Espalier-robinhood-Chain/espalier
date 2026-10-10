@@ -11,7 +11,7 @@ import { ButtonLink } from '@/components/ui';
 export const metadata: Metadata = {
   title: 'Docs & Risk — Espalier',
   description:
-    'How Espalier works, what the numbers mean, and what can go wrong. Read this before you deposit. Demo preview.',
+    'How Espalier works, what the numbers mean, and what can go wrong. Live on Robinhood Chain mainnet, not audited. Read this before you deposit.',
 };
 
 // Daftar isi berkelompok (espalier.html ".docs-nav"). Id harus sama dengan id bagian di bawah.
@@ -31,6 +31,7 @@ const tocGroups = [
       ['graft', 'Graft Vaults'],
       ['cordon', 'Cordons'],
       ['numbers', 'Reading the numbers'],
+      ['contracts', 'Contracts on mainnet'],
     ],
   },
   {
@@ -71,7 +72,7 @@ const week = [
   ],
   [
     'A Picker pays',
-    'In the first version, a small set of approved Pickers quote a price. The winning Picker pays the premium before anything else happens.',
+    'At launch, one approved Picker quotes a price. Adding more Pickers goes through the 48-hour timelock. The Picker pays the premium before anything else happens.',
   ],
   [
     'The round expires',
@@ -128,7 +129,7 @@ const numbers = [
   ],
   [
     'Demo labels',
-    'In this preview, every figure comes from demo data and is labelled as demo. None of it is a live price.',
+    'Figures for the products live on mainnet come from the chain through the indexer. Anything still drawn from sample data is labelled demo and is not a live price.',
   ],
 ] as const;
 
@@ -155,7 +156,7 @@ const risks = [
   ],
   [
     'Oracles can be wrong or late',
-    'The design checks every price for age and sanity, and checks that the network’s sequencer is running. Checks reduce the risk. They do not remove it.',
+    'The design checks every price for age and sanity. On Robinhood Chain mainnet no sequencer uptime feed is set yet, so the sequencer check is switched off. Checks reduce the risk. They do not remove it.',
   ],
   [
     'Corporate actions can delay a round',
@@ -167,7 +168,15 @@ const risks = [
   ],
   [
     'Contracts can have bugs',
-    'These contracts are not built or audited yet. An external audit is planned before real deposits, and early vaults will have deposit caps. Audits lower the chance of a bug. They do not rule it out.',
+    'These contracts are live on mainnet with real assets and have not been externally audited. Spur and Graft vaults have deposit caps. An audit lowers the chance of a bug. It does not rule it out. Deposit only what you can afford to lose.',
+  ],
+  [
+    'Mainnet is new',
+    'Very little has run on these contracts so far. Unexpected behaviour is more likely here than in a mature protocol.',
+  ],
+  [
+    'Admin and pause powers',
+    'Changes to parameters, Pickers, and fees go through a 48-hour timelock. A separate guardian can pause an asset’s price handling to stop rounds. It cannot move funds or change parameters.',
   ],
   [
     'Entering and leaving costs something',
@@ -194,13 +203,34 @@ const open = [
   ],
   [
     'Fee levels',
-    'Every fee will have a maximum written into the contract. The rates are not set.',
+    'Every Cordon fee starts at 0%. Each has a maximum written into the contract, and any change waits 48 hours.',
   ],
-  ['The first Pickers', 'Who they are and the smallest size they will quote.'],
+  [
+    'More Pickers',
+    'One Picker is registered at launch. Who else joins, and the smallest size they will quote, is not decided.',
+  ],
+  [
+    'Pruning venue',
+    'Pruning needs a trading venue set by the admin through the timelock. Which venue, and when, is not decided.',
+  ],
   [
     'How access is checked',
-    'Which checks apply, and whether identity verification is needed for the option vaults.',
+    'Espalier does not check location or identity today. Whether it will, including for the option vaults, is not decided.',
   ],
+] as const;
+
+const explorer = 'https://robinhoodchain.blockscout.com/address/';
+// Alamat mainnet (chain 4663), disalin dari contracts/deployments/*-mainnet.json. Ubah di sini bila redeploy.
+const contracts = [
+  ['cMAG7 Cordon', '0x814C595c09ffDe30f8089E11Df50D99D0d1aa195'],
+  ['cCHIP Cordon', '0xE75388EEC5b7D76932f61BFB861a16d4C1404604'],
+  ['cVOLT Cordon', '0x2D4e49a71f4F3dd1C1DfE1D21e7e00636F2b712A'],
+  ['Spur Vault (NVDA)', '0xde42B2355E0Ef2e6D181af88eE6BB42a5EDB63e5'],
+  ['Graft Vault (NVDA)', '0xD146CDA52b467DF833CE463511630aff9582345E'],
+  ['Harvest auction', '0xb471Fb2AEfdcB87E6EfA0c5fCFb542c9f4c32A53'],
+  ['Oracle router', '0xd4C6d51BabB29948eBc9a5e899272FA94C2ABaD8'],
+  ['Settlement oracle', '0xF7B65F9a5Ff3aB75661347CB27f05a1DF3ba56e0'],
+  ['Timelock (admin)', '0x03549BC22531f26722CC815d32F9548E4ba6A534'],
 ] as const;
 
 const h2 =
@@ -270,7 +300,7 @@ export default function DocsPage() {
             </p>
             <p>
               <span className="rounded-full border border-wire px-3 py-1 text-sm text-bark">
-                Demo preview · no real assets
+                Live on mainnet · not audited
               </span>
             </p>
           </div>
@@ -307,8 +337,9 @@ export default function DocsPage() {
                   market sessions close.
                 </li>
                 <li>
-                  This is a demo preview. The contracts are not built or audited
-                  yet, so this page describes how Espalier is designed to work.
+                  The contracts are live on Robinhood Chain mainnet (chain
+                  4663) and are not audited. Deposit only what you can afford
+                  to lose.
                 </li>
               </ul>
             </Reveal>
@@ -412,8 +443,7 @@ export default function DocsPage() {
               </h2>
               <p className={lead}>
                 Deposit USDG. Each round, the vault agrees to take the loss if a
-                stock ends below a strike. You are paid premium to wait. Graft
-                Vaults are demo only for now.
+                stock ends below a strike. You are paid premium to wait.
               </p>
               <figure className="mt-6">
                 <PayoffChart kind="graft" titleId="graft-chart-title" />
@@ -443,8 +473,10 @@ export default function DocsPage() {
               </h2>
               <p className={lead}>
                 One token, one basket. cMAG7 holds AAPL, MSFT, GOOGL, AMZN,
-                META, NVDA, and TSLA at equal weight. A Cordon has no premium:
-                you keep the basket’s ups and its downs.
+                META, NVDA, and TSLA at equal weight. cCHIP holds
+                semiconductors and cVOLT holds electric-vehicle and frontier
+                tech names. A Cordon has no premium: you keep the basket’s ups
+                and its downs.
               </p>
               <p className="mt-5 max-w-prose overflow-x-auto rounded-[14px] bg-panel px-4 py-3 font-mono text-sm">
                 NAV per share = Σ(balance × price) ÷ total shares
@@ -471,15 +503,17 @@ export default function DocsPage() {
                   <dd className="text-bark">
                     On a schedule, and only while prices are live, the basket
                     trades back to its target weights. Each trade is checked
-                    against the oracle price with a slippage limit.
+                    against the oracle price with a slippage limit. Pruning
+                    needs a trading venue that the admin sets through the
+                    timelock. Until one is set, weights drift with prices.
                   </dd>
                 </div>
                 <div>
                   <dt className="font-display text-lg">Fees</dt>
                   <dd className="text-bark">
-                    A management fee and mint and redeem fees. Rates are not set
-                    in this preview. Each fee has a maximum written into the
-                    contract.
+                    A management fee and mint and redeem fees. All three start
+                    at 0%. The contract caps them at 1% to mint, 1% to redeem,
+                    and 2% a year for management. A change waits 48 hours.
                   </dd>
                 </div>
               </dl>
@@ -502,6 +536,55 @@ export default function DocsPage() {
                   </div>
                 ))}
               </dl>
+            </Reveal>
+
+            <Reveal
+              as="section"
+              id="contracts"
+              aria-labelledby="contracts-title"
+              className="doc-sec scroll-mt-6"
+            >
+              <h2 id="contracts-title" className={h2}>
+                Contracts on mainnet
+              </h2>
+              <p className={lead}>
+                Robinhood Chain mainnet, chain 4663. Check an address here
+                against the one in your wallet before you sign anything.
+              </p>
+              <div className="mt-6 max-w-prose overflow-x-auto rounded-[18px] bg-panel p-4">
+                <table className="w-full border-collapse text-sm">
+                  <caption className="sr-only">Espalier contracts on mainnet</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col" className={th}>
+                        Contract
+                      </th>
+                      <th scope="col" className={th}>
+                        Address
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {contracts.map(([name, addr]) => (
+                      <tr key={name}>
+                        <th scope="row" className={`${td} text-left font-medium`}>
+                          {name}
+                        </th>
+                        <td className={`${td} font-mono text-xs break-all`}>
+                          <a
+                            href={`${explorer}${addr}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-ink underline underline-offset-4"
+                          >
+                            {addr}
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </Reveal>
 
             <CordonDivider />
@@ -545,8 +628,8 @@ export default function DocsPage() {
                   issuer’s own terms hold the full list, and it can change.
                 </p>
                 <p>
-                  Espalier will add checks before launch. You are still
-                  responsible for knowing whether you may use it.{' '}
+                  Espalier does not check where you are or who you are. You
+                  are responsible for knowing whether you may use it.{' '}
                   <Link
                     href="/restricted"
                     className="text-ink underline underline-offset-4"

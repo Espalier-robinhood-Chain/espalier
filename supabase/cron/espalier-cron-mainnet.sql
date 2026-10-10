@@ -4,8 +4,8 @@
 
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
-select vault.create_secret('<CRON_SECRET>', 'espalier_cron_secret');
-select vault.create_secret('https://DOMAIN', 'espalier_cron_base_url');   -- domain produksi, tanpa garis miring di akhir
+select vault.create_secret('253a9997e416e1ae9732eee3d9a8c93eb56e99c8271f501dbd71f5acc04ce109', 'espalier_cron_secret');
+select vault.create_secret('https://espalier-mu.vercel.app', 'espalier_cron_base_url');   -- domain produksi, tanpa garis miring di akhir
 
 -- 3. Fungsi pemanggil. Schema khusus yang tidak diekspos PostgREST, dan EXECUTE dicabut dari peran publik.
 create schema if not exists espalier_cron;
