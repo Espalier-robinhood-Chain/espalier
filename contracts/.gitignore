@@ -1,10 +1,22 @@
 out/
 cache/
 broadcast/
+artifacts/
+cache_hardhat/
+crytic-export/
 .env
 slither.db.json
-# Hasil rehearsal/mock tidak dikomit; deployments/robinhood-testnet.json (hasil nyata) dikomit.
+report.md
+report.sarif
+report.json
+lcov.info
+
+# Hasil rehearsal/mock tidak dikomit; deployments/robinhood-mainnet.json dan sejenisnya (hasil nyata) dikomit.
 deployments/*mock*.json
 deployments/anvil-*.json
 
-lib/
+# Dibuat otomatis oleh skrip deploy
+script/config/*.resolved.json
+script/config/*.bak
+
+# lib/ sengaja TIDAK di-ignore: forge-std dan openzeppelin-contracts adalah submodule (lihat ../.gitmodules)

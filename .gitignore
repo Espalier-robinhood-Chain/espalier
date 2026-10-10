@@ -1,19 +1,129 @@
+# =====================================================================
+# Dependensi
+# (tanpa garis miring awal = berlaku di semua level: root, keeper, indexer, packages/sdk)
+# =====================================================================
 node_modules
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# =====================================================================
+# Next.js / build output
+# =====================================================================
 .next
+/out
+/build
+next-env.d.ts
 .turbo
-.env*.local
-vercel.env
+.vercel
 *.tsbuildinfo
 
-# rahasia (jangan pernah di-commit)
+# Hasil build keeper, indexer, dan SDK
+/keeper/dist
+/indexer/dist
+/packages/sdk/dist
+
+# =====================================================================
+# RAHASIA (jangan pernah di-commit)
+# File contoh (*.example) tetap di-commit.
+# =====================================================================
 .env
+.env.*
+!.env.example
+!.env.local.example
+*.env
+vercel.env
 keeper/.env
 keeper/rfq.env
-*.env
 
-# contracts (Foundry)
+# Kunci, sertifikat, keystore wallet
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+keystore/
+.env.keys
+.dotenvx
+
+# =====================================================================
+# Test, coverage, laporan e2e
+# =====================================================================
+coverage
+.nyc_output
+lcov.info
+playwright-report
+test-results
+.playwright
+
+# =====================================================================
+# Log dan cache tool
+# =====================================================================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm
+.eslintcache
+.cache
+.parcel-cache
+
+# =====================================================================
+# Foundry / Solidity (hasil forge, bukan sumber)
+# contracts/lib TIDAK di-ignore: itu submodule (forge-std, openzeppelin), lihat .gitmodules
+# =====================================================================
+/cache
 contracts/out
 contracts/cache
 contracts/broadcast
-contracts/lib
-contracts/deployments/*-mock.json
+contracts/cache_hardhat
+contracts/artifacts
+contracts/slither.db.json
+contracts/crytic-export
+contracts/report.md
+contracts/report.sarif
+contracts/report.json
+contracts/lcov.info
+contracts/.gas-snapshot.tmp
+
+# Hasil deploy: rehearsal/mock/anvil tidak di-commit. Hasil nyata (mis. robinhood-mainnet.json) di-commit.
+contracts/deployments/*mock*.json
+contracts/deployments/anvil-*.json
+
+# Config terselesaikan (dibuat otomatis oleh skrip deploy) dan cadangan manual
+contracts/script/config/*.resolved.json
+contracts/script/config/*.bak
+*.json.bak
+
+# Salinan hasil deploy di root + log broadcast (duplikat dari contracts/deployments)
+/mainnet-*-20??-??-??.json
+/mainnet-*-broadcast-*.json
+
+# =====================================================================
+# Supabase lokal (supabase/.gitignore sudah menangani .branches, .temp)
+# =====================================================================
+supabase/.branches
+supabase/.temp
+supabase/.env
+
+# =====================================================================
+# Editor dan OS
+# =====================================================================
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*.swo
+*~
+*.bak
+*.tmp
+*.orig
