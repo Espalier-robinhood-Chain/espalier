@@ -51,3 +51,17 @@ test("quoteTypedData: tanda tangan bisa dipulihkan ke alamat Picker", async () =
   assert.equal(td.domain.name, "EspalierHarvestAuction"); assert.equal(td.domain.version, "1");
   assert.equal(td.types.Quote.map((f) => f.name).join(","), "vault,picker,round,strikeE18,expiry,notional,premium,deadline");
 });
+
+test("mainnet: butuh opt-in, batas eksplisit, dan notional dibatasi", () => {
+  const m = { ...env, KEEPER_CHAIN_ID: "4663" };
+  assert.throws(() => loadRfqPolicy(m), /RFQ_ALLOW_MAINNET/);
+  assert.throws(() => loadRfqPolicy({ ...m, RFQ_ALLOW_MAINNET: "true" }), /RFQ_PREMIUM_RAW wajib/);
+  const full = { ...m, RFQ_ALLOW_MAINNET: "true", RFQ_PREMIUM_RAW: "5000000", RFQ_MAX_PREMIUM_RAW: "10000000", RFQ_MAX_NOTIONAL_RAW: "2000000000000000000" };
+  assert.throws(() => loadRfqPolicy({ ...full, RFQ_MAX_NOTIONAL_RAW: "" }), /RFQ_MAX_NOTIONAL_RAW wajib/);
+  assert.throws(() => loadRfqPolicy({ ...full, RFQ_MAX_NOTIONAL_RAW: "0" }), /lebih dari 0/);
+  const p = loadRfqPolicy(full);
+  assert.equal(p.chainId, 4663); assert.equal(p.maxNotional, 2_000_000_000_000_000_000n);
+  const r = parseRfqRequest({ ...body, chainId: 4663 });
+  assert.equal(decideQuote(r, p, NOW).ok, true);
+  assert.equal(decideQuote({ ...r, notional: 2_000_000_000_000_000_001n }, p, NOW).ok, false);
+});

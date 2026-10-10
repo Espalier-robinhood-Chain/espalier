@@ -6,7 +6,7 @@
 //    dan tidak perlu node arsip untuk backfill.
 //  * Urutan tulis: posisi -> NAV -> kursor. Crash di tengah hanya berarti rentang itu diproses ulang.
 //  * Hanya blok sedalam `confirmations` yang diindeks, sebagai pengaman reorg.
-import { chunkRanges, lower, toDecimal, ZERO } from "./decimal.ts";
+import { capEnd, chunkRanges, lower, toDecimal, ZERO } from "./decimal.ts";
 
 export interface ComponentMeta { token: string; ticker: string; weightBps: number }
 export interface VaultMeta { address: string; symbol: string; name: string; decimals: number; components: ComponentMeta[] }
@@ -35,8 +35,8 @@ export interface Store {
   upsertNav(row: NavRow): Promise<void>;
 }
 
-export interface SyncConfig { startBlock: bigint; confirmations: bigint; logChunk: bigint; balanceBatch: number }
-export interface SyncResult { from: bigint; to: bigint; touched: number; navWritten: boolean }
+export interface SyncConfig { startBlock: bigint; confirmations: bigint; logChunk: bigint; balanceBatch: number; /** Batas potongan per putaran (cron). undefined/0 = tanpa batas. */ maxChunks?: number }
+export interface SyncResult { from: bigint; to: bigint; touched: number; navWritten: boolean; /** true bila putaran dibatasi maxChunks dan masih tertinggal dari blok aman. */ partial?: boolean }
 
 const E18 = 18;
 
@@ -71,8 +71,11 @@ export async function syncOnce(chain: Chain, store: Store, cfg: SyncConfig, boot
   const from = cursor ?? cfg.startBlock;
   if (safe < from) return null;
 
+  // Tertinggal jauh: proses paling banyak maxChunks potongan, simpan kursor, lanjut di putaran berikut (kursor tidak boleh menunggu seluruh rentang).
+  const end = capEnd(from, safe, cfg.logChunk, cfg.maxChunks);
+  const partial = end < safe;
   const touched = new Set<string>();
-  for (const [a, b] of chunkRanges(from, safe, cfg.logChunk)) {
+  for (const [a, b] of chunkRanges(from, end, cfg.logChunk)) {
     for (const t of await chain.transfers(a, b)) {
       for (const x of [lower(t.from), lower(t.to)]) if (x !== ZERO) touched.add(x);
     }
@@ -94,10 +97,11 @@ export async function syncOnce(chain: Chain, store: Store, cfg: SyncConfig, boot
     if (empty.length) await store.deletePositions(contract, empty);
   }
 
-  // NAV hanya di ujung (blok aman terbaru): NAV historis butuh node arsip.
-  const navWritten = await writeNav(chain, store, boot.cordonId, boot.meta.decimals, safe);
-  await store.setCursor(safe + 1n);
-  return { from, to: safe, touched: touched.size, navWritten };
+  // NAV hanya di ujung (blok aman terbaru): NAV historis butuh node arsip. Putaran sebagian tidak menulis NAV.
+  // Saldo dibaca di `safe` (bukan `end`): akun yang berubah setelah `end` ikut tersentuh lagi di putaran berikut, hasil akhirnya sama.
+  const navWritten = partial ? false : await writeNav(chain, store, boot.cordonId, boot.meta.decimals, safe);
+  await store.setCursor(end + 1n);
+  return { from, to: end, touched: touched.size, navWritten, ...(partial ? { partial } : {}) };
 }
 
 /** Titik NAV berkala (harga oracle berubah walau tidak ada transaksi). Tidak menyentuh kursor. */

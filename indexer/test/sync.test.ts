@@ -158,3 +158,39 @@ test("loadConfig: EXTRA_CORDONS salah bentuk, alamat nol, blok bukan angka, atau
     assert.throws(() => loadConfig({ ...ENV, EXTRA_CORDONS: bad }), /EXTRA_CORDONS/, bad);
   }
 });
+
+test("syncOnce: maxChunks membatasi putaran, kursor maju, NAV ditunda sampai mengejar; hasil akhir sama dengan tanpa batas", async () => {
+  const world = { head: 140n, logs, bal: { [A]: 7n * E18, [B]: 0n } };
+  const capped = { ...CFG, maxChunks: 2 };
+  const { chain, calls } = fakeChain(world);
+  const { store, s } = fakeStore();
+  const r1 = await syncOnce(chain, store, capped, boot);
+  assert.deepEqual(r1, { from: 100n, to: 119n, touched: 2, navWritten: false, partial: true });
+  assert.deepEqual(calls.transfers, [[100n, 109n], [110n, 119n]]);
+  assert.equal(s.cursor, 120n, "kursor maju walau belum mengejar");
+  assert.equal(s.nav.length, 0, "NAV tidak ditulis saat masih mengejar");
+  const r2 = await syncOnce(chain, store, capped, boot);
+  assert.deepEqual(r2, { from: 120n, to: 135n, touched: 2, navWritten: true });
+  assert.equal(s.cursor, 136n);
+  assert.equal(s.nav.length, 1);
+  assert.equal(s.positions.get(A), "7");
+  assert.equal(s.positions.has(B), false);
+  assert.equal(await syncOnce(chain, store, capped, boot), null);
+});
+
+test("syncOnce: maxChunks 0 atau tidak diisi = tanpa batas", async () => {
+  for (const maxChunks of [undefined, 0]) {
+    const { chain, calls } = fakeChain({ head: 140n, logs, bal: { [A]: E18, [B]: E18 } });
+    const r = await syncOnce(chain, fakeStore().store, { ...CFG, maxChunks }, boot);
+    assert.equal(r?.to, 135n);
+    assert.equal(r?.partial, undefined);
+    assert.equal(calls.transfers.length, 4);
+  }
+});
+
+test("loadConfig: MAX_CHUNKS_PER_RUN bawaan 100, 0 = tanpa batas, bukan angka = galat", () => {
+  const base = { INDEXER_RPC_URL: "https://rpc.example", CORDON_VAULT_ADDRESS: V, START_BLOCK: "1", SUPABASE_URL: "https://x.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "k" };
+  assert.equal(loadConfig(base).maxChunks, 100);
+  assert.equal(loadConfig({ ...base, MAX_CHUNKS_PER_RUN: "0" }).maxChunks, 0);
+  assert.throws(() => loadConfig({ ...base, MAX_CHUNKS_PER_RUN: "abc" }), /MAX_CHUNKS_PER_RUN/);
+});

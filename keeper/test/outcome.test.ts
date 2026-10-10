@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { describeCordonOutcome, describeOutcome, keeperEnv, safeText } from "../src/outcome.ts";
+import { describeCordonOutcome, describeOutcome, keeperEnv, mainnetLiveRefusal, safeText } from "../src/outcome.ts";
 
 test("describeOutcome: hanya 'failed' yang ok=false", () => {
   assert.deepEqual(describeOutcome("spur", { kind: "waiting", reason: "jendela fill 3600s" }), { ok: true, kind: "waiting", line: "spur tunggu: jendela fill 3600s" });
@@ -30,4 +30,12 @@ test("describeCordonOutcome: hanya 'failed' yang ok=false", () => {
   assert.equal(pruned.ok, true); assert.equal(pruned.txHash, "0xabc"); assert.match(pruned.line, /1397 -> 40 bps \(6 trade\)/);
   const failed = describeCordonOutcome("cMAG7", { kind: "failed", error: "gagal https://x.g.alchemy.com/v2/RAHASIA revert" });
   assert.equal(failed.ok, false); assert.ok(!failed.line.includes("RAHASIA"));
+});
+
+test("mainnetLiveRefusal: live di 4663 hanya dengan opt-in eksplisit", () => {
+  assert.match(mainnetLiveRefusal({}, 4663, "live") ?? "", /ALLOW_MAINNET_CRON_KEEPER/);
+  assert.match(mainnetLiveRefusal({ ALLOW_MAINNET_CRON_KEEPER: "yes" }, 4663, "live") ?? "", /ALLOW_MAINNET_CRON_KEEPER/); // hanya "true" persis
+  assert.equal(mainnetLiveRefusal({ ALLOW_MAINNET_CRON_KEEPER: "true" }, 4663, "live"), null);
+  assert.equal(mainnetLiveRefusal({}, 4663, "dry-run"), null);
+  assert.equal(mainnetLiveRefusal({}, 46630, "live"), null); // testnet tidak berubah
 });

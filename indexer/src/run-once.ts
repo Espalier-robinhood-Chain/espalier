@@ -34,12 +34,12 @@ export async function runOnce(env: Record<string, string | undefined>, stream: s
       if (!c) return done(true, `${stream} tidak dikonfigurasi (EXTRA_CORDONS hanya berisi ${cfg.extraCordons.length} Cordon tambahan)`, true);
       const chain = await createViemChain(cfg.rpcUrl, c.vault, cfg.chainId);
       const store = createSupabaseStore(cfg.supabaseUrl, cfg.serviceKey, `cordon:${cfg.chainId}:${c.vault.toLowerCase()}`);
-      const sync: SyncConfig = { startBlock: c.startBlock, confirmations: cfg.confirmations, logChunk: cfg.logChunk, balanceBatch: cfg.balanceBatch };
+      const sync: SyncConfig = { startBlock: c.startBlock, confirmations: cfg.confirmations, logChunk: cfg.logChunk, balanceBatch: cfg.balanceBatch, maxChunks: cfg.maxChunks };
       const boot = await bootstrap(chain, store);
       const sym = boot.meta.symbol;
       const r = await syncOnce(chain, store, sync, boot);
-      let line = r ? `${sym} sinkron blok ${r.from}..${r.to}: ${r.touched} akun berubah, NAV ${r.navWritten ? "ditulis" : "dilewati (harga tidak valid)"}` : `${sym} tidak ada blok baru`;
-      if (navDue(nowMs, cfg.navEveryMs)) {
+      let line = r ? `${sym} sinkron blok ${r.from}..${r.to}: ${r.touched} akun berubah, ${r.partial ? "mengejar, NAV ditunda" : `NAV ${r.navWritten ? "ditulis" : "dilewati (harga tidak valid)"}`}` : `${sym} tidak ada blok baru`;
+      if (!r?.partial && navDue(nowMs, cfg.navEveryMs)) {
         const ok = await snapshotNav(chain, store, sync, boot);
         line += ok ? "; snapshot NAV ditulis" : "; snapshot NAV dilewati (harga tidak valid)";
       }
@@ -50,9 +50,9 @@ export async function runOnce(env: Record<string, string | undefined>, stream: s
     const chain = await createSpurChain(cfg.rpcUrl, v.vault, cfg.chainId, spec.kind);
     const store = createSpurStore(cfg.supabaseUrl, cfg.serviceKey, `${stream}:${cfg.chainId}:${v.vault.toLowerCase()}`);
     const boot = await bootstrapSpur(chain, store, v.symbol);
-    const sync: SpurSyncConfig = { startBlock: v.startBlock, confirmations: cfg.confirmations, logChunk: cfg.logChunk, balanceBatch: cfg.balanceBatch };
+    const sync: SpurSyncConfig = { startBlock: v.startBlock, confirmations: cfg.confirmations, logChunk: cfg.logChunk, balanceBatch: cfg.balanceBatch, maxChunks: cfg.maxChunks };
     const r = await syncSpurOnce(chain, store, sync, boot);
-    return done(true, r ? `${stream} blok ${r.from}..${r.to}: ${r.events} event, ${r.rounds} round, ${r.harvests} harvest, ${r.positions} posisi` : `${stream} tidak ada blok baru`);
+    return done(true, r ? `${stream} blok ${r.from}..${r.to}: ${r.events} event, ${r.rounds} round, ${r.harvests} harvest, ${r.positions} posisi${r.partial ? " (mengejar)" : ""}` : `${stream} tidak ada blok baru`);
   } catch (e) {
     return done(false, `galat: ${safeError(e)}`);
   }

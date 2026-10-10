@@ -396,11 +396,11 @@ contract DeployTest is Test {
 
     // --------------------------------------------------------------- penolakan
 
-    function test_rejects_mainnet() public {
+    function test_mainnet_rejectsWithoutTimelock() public {
         vm.chainId(4663);
         P memory p = _base();
         p.chainId = 4663;
-        _expectConfigError(p, "skrip ini tidak untuk mainnet (4663)");
+        _expectConfigError(p, "mainnet: timelockDelaySeconds minimal 172800 (48 jam)");
     }
 
     function test_rejects_chainMismatch() public {
@@ -526,7 +526,7 @@ contract DeployTest is Test {
         p.mocks = true;
         p.chainId = 4663;
         p.useRealAddresses = false;
-        _expectConfigError(p, "skrip ini tidak untuk mainnet (4663)");
+        _expectConfigError(p, "mainnet: mocks=true dilarang");
     }
 
     // ------------------------------------------------------------------ Spur Vault di skrip deploy (M4)
@@ -916,5 +916,157 @@ contract DeployTest is Test {
         v.claimPremium();
         assertApproxEqAbs(c.usdg.balanceOf(c.gardener), 200e6, 1);
         assertEq(v.managedAssets(), 10_000e6 - payout);
+    }
+
+    // ------------------------------------------------------------ routerAssets
+
+    /// Menambahkan bagian `routerAssets` ke JSON konfigurasi (membuang kurung kurawal penutup, lalu menutup lagi).
+    function _withRouterAssets(string memory j, string memory ra) internal pure returns (string memory) {
+        bytes memory b = bytes(j);
+        bytes memory head = new bytes(b.length - 1);
+        for (uint256 i; i < head.length; ++i) {
+            head[i] = b[i];
+        }
+        return string.concat(string(head), ',"routerAssets":[', ra, "]}");
+    }
+
+    function _routerAsset(string memory sym, address token, address feed, uint256 reg)
+        internal
+        pure
+        returns (string memory)
+    {
+        return string.concat(
+            '{"symbol":"',
+            sym,
+            '","token":"',
+            vm.toString(token),
+            '","feed":"',
+            vm.toString(feed),
+            '","stalenessRegularSeconds":',
+            vm.toString(reg),
+            ',"stalenessExtendedSeconds":1800,"stalenessOvernightSeconds":3600,"checkOraclePause":true}'
+        );
+    }
+
+    function _newAsset(uint256 price) internal returns (address token, address feed) {
+        token = address(new MockERC20("X", "X", 18));
+        MockAggregator f = new MockAggregator(8);
+        f.setRound(int256(price));
+        feed = address(f);
+    }
+
+    function _twoRouterAssets(address t1, address f1, address t2, address f2) internal pure returns (string memory) {
+        return string.concat(_routerAsset("XXX", t1, f1, 900), ",", _routerAsset("YYY", t2, f2, 900));
+    }
+
+    function test_routerAssets_registeredInRouterButNotComponentsOfCordon() public {
+        (address t1, address f1) = _newAsset(160e8);
+        (address t2, address f2) = _newAsset(200e8);
+        string memory j = _withRouterAssets(_json(_base()), _twoRouterAssets(t1, f1, t2, f2));
+        Deploy.Result memory r = script.deploy(j);
+
+        assertEq(r.vault.componentCount(), 3); // tetap 3 komponen dari `assets`
+        OracleRouter.Asset memory a1 = r.router.assetConfig(t1);
+        OracleRouter.Asset memory a2 = r.router.assetConfig(t2);
+        assertEq(address(a1.feed), f1);
+        assertEq(address(a2.feed), f2);
+        assertEq(a1.stalenessRegular, 900);
+        assertEq(a1.stalenessExtended, 1800);
+        assertEq(a1.stalenessOvernight, 3600);
+        assertTrue(a1.checkOraclePause);
+        // Aset dari `assets` tetap terdaftar seperti biasa.
+        assertEq(address(r.router.assetConfig(tokens[0]).feed), feeds[0]);
+    }
+
+    function test_routerAssets_withTimelock_vaultForNewAssetsCanBeDeployedLaterWithoutRouterAdmin() public {
+        (address t1, address f1) = _newAsset(160e8);
+        (address t2, address f2) = _newAsset(200e8);
+        P memory p = _base();
+        p.timelockDelay = 48 hours;
+        Deploy.Result memory r = script.deploy(_withRouterAssets(_json(p), _twoRouterAssets(t1, f1, t2, f2)));
+
+        // Setelah serah-terima, pengirim lama tidak bisa mendaftarkan aset lagi (hanya timelock) ...
+        vm.prank(r.deployer);
+        vm.expectRevert();
+        r.router.setAssetWindows(t1, f1, 1, 1, 1, false);
+
+        // ... tetapi Cordon baru dari aset yang SUDAH terdaftar bisa dibuat tanpa wewenang apa pun di router.
+        address[] memory comps = new address[](2);
+        comps[0] = t1;
+        comps[1] = t2;
+        uint16[] memory w = new uint16[](2);
+        w[0] = 5000;
+        w[1] = 5000;
+        CordonVault v = new CordonVault(address(this), address(r.router), "Second", "cSEC", comps, w);
+        assertEq(v.componentCount(), 2);
+        assertEq(address(v.ROUTER()), address(r.router));
+    }
+
+    function test_routerAssets_absent_changesNothing() public {
+        Deploy.Result memory r = _deploy(_base());
+        assertEq(r.vault.componentCount(), 3);
+    }
+
+    function test_routerAssets_rejects_duplicateOfAssetsToken() public {
+        (, address f1) = _newAsset(160e8);
+        (address t2, address f2) = _newAsset(200e8);
+        string memory j = _withRouterAssets(_json(_base()), _twoRouterAssets(tokens[0], f1, t2, f2));
+        vm.expectRevert(bytes("config: routerAssets token sudah ada di assets"));
+        script.deploy(j);
+    }
+
+    function test_routerAssets_rejects_duplicateSymbolAgainstAssets() public {
+        (address t1, address f1) = _newAsset(160e8);
+        (address t2, address f2) = _newAsset(200e8);
+        string memory ra = string.concat(_routerAsset("AAA", t1, f1, 900), ",", _routerAsset("YYY", t2, f2, 900));
+        string memory j = _withRouterAssets(_json(_base()), ra);
+        vm.expectRevert(bytes("config: routerAssets simbol sudah ada di assets"));
+        script.deploy(j);
+    }
+
+    function test_routerAssets_rejects_duplicateAmongThemselves() public {
+        (address t1, address f1) = _newAsset(160e8);
+        string memory ra = string.concat(_routerAsset("XXX", t1, f1, 900), ",", _routerAsset("YYY", t1, f1, 900));
+        string memory j = _withRouterAssets(_json(_base()), ra);
+        vm.expectRevert(bytes("config: routerAssets token ganda"));
+        script.deploy(j);
+    }
+
+    function test_routerAssets_rejects_tokenWithoutCode() public {
+        (, address f1) = _newAsset(160e8);
+        (address t2, address f2) = _newAsset(200e8);
+        string memory ra = string.concat(_routerAsset("XXX", makeAddr("eoa"), f1, 900), ",", _routerAsset("YYY", t2, f2, 900));
+        string memory j = _withRouterAssets(_json(_base()), ra);
+        vm.expectRevert(bytes("config: routerAssets token kosong / tanpa kode"));
+        script.deploy(j);
+    }
+
+    function test_routerAssets_rejects_feedWithoutCode() public {
+        (address t1,) = _newAsset(160e8);
+        (address t2, address f2) = _newAsset(200e8);
+        string memory ra = string.concat(_routerAsset("XXX", t1, makeAddr("eoa"), 900), ",", _routerAsset("YYY", t2, f2, 900));
+        string memory j = _withRouterAssets(_json(_base()), ra);
+        vm.expectRevert(bytes("config: routerAssets feed kosong / tanpa kode"));
+        script.deploy(j);
+    }
+
+    function test_routerAssets_rejects_zeroStaleness() public {
+        (address t1, address f1) = _newAsset(160e8);
+        (address t2, address f2) = _newAsset(200e8);
+        string memory ra = string.concat(_routerAsset("XXX", t1, f1, 0), ",", _routerAsset("YYY", t2, f2, 900));
+        string memory j = _withRouterAssets(_json(_base()), ra);
+        vm.expectRevert(bytes("config: routerAssets jendela staleness 0"));
+        script.deploy(j);
+    }
+
+    function test_routerAssets_rejects_inMockMode() public {
+        (address t1, address f1) = _newAsset(160e8);
+        (address t2, address f2) = _newAsset(200e8);
+        P memory p = _base();
+        p.mocks = true;
+        p.useRealAddresses = false;
+        string memory j = _withRouterAssets(_json(p), _twoRouterAssets(t1, f1, t2, f2));
+        vm.expectRevert(bytes("config: routerAssets hanya untuk mode nyata (mocks=false)"));
+        script.deploy(j);
     }
 }
