@@ -1,0 +1,29 @@
+{
+  "_note": "Template. deploy-spurgraft-mainnet.sh MENGISI router, settlement, owner (timelock), keeper, guardian, usdg, asset, picker, dan depositCap dari deployment mainnet + env; jangan diisi manual. depositCap sengaja 0 di sini: skrip menolak 0, jadi cap WAJIB diberikan eksplisit lewat env saat menjalankan wrapper.",
+  "name": "spurgraft-mainnet",
+  "chainId": 4663,
+  "addressesVerified": false,
+  "router": "0x0000000000000000000000000000000000000000",
+  "settlement": "0x0000000000000000000000000000000000000000",
+  "owner": "0x0000000000000000000000000000000000000000",
+  "keeper": "0x0000000000000000000000000000000000000000",
+  "guardian": "0x0000000000000000000000000000000000000000",
+  "usdg": "0x0000000000000000000000000000000000000000",
+  "asset": "0x0000000000000000000000000000000000000000",
+  "assetSymbol": "NVDA",
+  "picker": "0x0000000000000000000000000000000000000000",
+  "spur": {
+    "fillWindowSeconds": "21600",
+    "minDeposit": "1000000000000",
+    "depositCap": "0",
+    "otmBps": "1000",
+    "minPremiumBps": "0"
+  },
+  "graft": {
+    "fillWindowSeconds": "21600",
+    "minDeposit": "1000000",
+    "depositCap": "0",
+    "otmBps": "1000",
+    "minPremiumBps": "0"
+  }
+}

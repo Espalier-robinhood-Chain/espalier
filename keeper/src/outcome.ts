@@ -36,3 +36,13 @@ export function safeText(e: unknown): string {
   const raw = e instanceof Error ? e.message : String(e);
   return raw.replace(/https?:\/\/\S+/g, "<url>").replace(/\s+/g, " ").trim().slice(0, 300);
 }
+
+/**
+ * Mainnet (4663): keeper LIVE lewat cron hanya jalan bila ALLOW_MAINNET_CRON_KEEPER=true (kunci keeper ada di env server).
+ * Mengembalikan alasan penolakan, atau null bila boleh jalan. Dry-run dan testnet tidak pernah ditolak.
+ */
+export function mainnetLiveRefusal(e: Record<string, string | undefined>, chainId: number, mode: "dry-run" | "live"): string | null {
+  if (mode !== "live" || chainId !== 4663) return null;
+  if (e.ALLOW_MAINNET_CRON_KEEPER?.trim() === "true") return null;
+  return "keeper live dari cron di mainnet (4663) butuh ALLOW_MAINNET_CRON_KEEPER=true (kunci keeper di env server), atau jalankan keeper/ sebagai worker";
+}

@@ -18,7 +18,7 @@ const cordons: CordonPipe[] = [];
 for (const c of [{ vault: cfg.vault, startBlock: cfg.startBlock }, ...cfg.extraCordons]) {
   const cChain = await createViemChain(cfg.rpcUrl, c.vault, cfg.chainId);
   const cStore = createSupabaseStore(cfg.supabaseUrl, cfg.serviceKey, `cordon:${cfg.chainId}:${c.vault.toLowerCase()}`);
-  const cSync: SyncConfig = { startBlock: c.startBlock, confirmations: cfg.confirmations, logChunk: cfg.logChunk, balanceBatch: cfg.balanceBatch };
+  const cSync: SyncConfig = { startBlock: c.startBlock, confirmations: cfg.confirmations, logChunk: cfg.logChunk, balanceBatch: cfg.balanceBatch, maxChunks: cfg.maxChunks };
   const cBoot = await bootstrap(cChain, cStore);
   cordons.push({ chain: cChain, store: cStore, sync: cSync, boot: cBoot, lastSnapshot: 0 });
   log(`indexer siap: ${cBoot.meta.symbol} @ ${cBoot.meta.address} (chain ${cfg.chainId}), ${cBoot.meta.components.length} komponen`);
@@ -33,7 +33,7 @@ for (const [name, v] of [["spur", cfg.spur], ["graft", cfg.graft]] as const) {
   const vChain = await createSpurChain(cfg.rpcUrl, v.vault, cfg.chainId, name);
   const vStore = createSpurStore(cfg.supabaseUrl, cfg.serviceKey, `${name}:${cfg.chainId}:${v.vault.toLowerCase()}`);
   const vBoot = await bootstrapSpur(vChain, vStore, v.symbol);
-  vaults.push({ name, chain: vChain, store: vStore, boot: vBoot, sync: { startBlock: v.startBlock, confirmations: cfg.confirmations, logChunk: cfg.logChunk, balanceBatch: cfg.balanceBatch } });
+  vaults.push({ name, chain: vChain, store: vStore, boot: vBoot, sync: { startBlock: v.startBlock, confirmations: cfg.confirmations, logChunk: cfg.logChunk, balanceBatch: cfg.balanceBatch, maxChunks: cfg.maxChunks } });
   log(`${name} siap: ${v.symbol ?? (name === "graft" ? "g" : "s") + (vBoot.meta.underlyingSymbol ?? vBoot.meta.assetSymbol)} @ ${vBoot.meta.address}`);
 }
 
@@ -49,7 +49,7 @@ while (!stop) {
   for (const c of cordons) {
     await attempt(c.boot.meta.symbol, async () => {
       const r = await syncOnce(c.chain, c.store, c.sync, c.boot);
-      if (r) log(`${c.boot.meta.symbol} sinkron blok ${r.from}..${r.to}: ${r.touched} akun berubah, NAV ${r.navWritten ? "ditulis" : "dilewati (harga tidak valid)"}`);
+      if (r) log(`${c.boot.meta.symbol} sinkron blok ${r.from}..${r.to}: ${r.touched} akun berubah, ${r.partial ? "mengejar, NAV ditunda" : `NAV ${r.navWritten ? "ditulis" : "dilewati (harga tidak valid)"}`}`);
       if (Date.now() - c.lastSnapshot >= cfg.navEveryMs) {
         const ok = await snapshotNav(c.chain, c.store, c.sync, c.boot);
         c.lastSnapshot = Date.now();

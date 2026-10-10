@@ -9,6 +9,8 @@ export interface IndexerConfig {
   confirmations: bigint;
   logChunk: bigint;
   balanceBatch: number;
+  /** Potongan getLogs maksimum per putaran (MAX_CHUNKS_PER_RUN, bawaan 100; 0 = tanpa batas). Menjaga putaran cron selesai dan kursor maju saat mengejar. */
+  maxChunks: number;
   pollMs: number;
   navEveryMs: number;
   /** Cordon tambahan (opsional, mis. cCHIP): EXTRA_CORDONS="0xalamat@blokDeploy,0xalamat@blokDeploy". Kosong = tidak ada. */
@@ -51,6 +53,7 @@ export function loadConfig(e: Record<string, string | undefined>): IndexerConfig
     confirmations: BigInt(int(e, "CONFIRMATIONS", 5, 0)),
     logChunk: BigInt(int(e, "LOG_CHUNK", 2000, 1)),
     balanceBatch: int(e, "BALANCE_BATCH", 25, 1),
+    maxChunks: int(e, "MAX_CHUNKS_PER_RUN", 100, 0),
     pollMs: int(e, "POLL_MS", 5000, 500),
     navEveryMs: int(e, "NAV_EVERY_MS", 300_000, 5000),
   };

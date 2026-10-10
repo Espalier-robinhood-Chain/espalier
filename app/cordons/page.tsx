@@ -18,10 +18,10 @@ export const metadata: Metadata = {
 
 const sessionFmt = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "numeric", minute: "2-digit" });
 
-// Basket pasca-MVP (brief §1). Bukan produk live: tanpa link, tanpa angka.
+// Basket pasca-MVP. Komposisi = mainnet (cCHIP: NVDA AMD TSM MU; cVOLT: TSLA PLTR RKLB IONQ, bobot 25% x 4 = asumsi). Bukan produk live: tanpa link, tanpa angka.
 const planned = [
-  { symbol: "cCHIP", name: "Semiconductors", chips: ["NVDA", "AMD", "AVGO", "TSM"], weighting: "To be set" },
-  { symbol: "cVOLT", name: "Electric vehicles", chips: ["TSLA", "RIVN", "LCID", "NIO"], weighting: "Equal" },
+  { symbol: "cCHIP", name: "Semiconductors", chips: ["NVDA", "AMD", "TSM", "MU"], weighting: "Equal" },
+  { symbol: "cVOLT", name: "Volt", chips: ["TSLA", "PLTR", "RKLB", "IONQ"], weighting: "Equal" },
 ];
 
 type Loaded = { kind: "ok"; cordons: Awaited<ReturnType<typeof listCordons>>; trends: Record<string, number[]> } | { kind: "unconfigured" } | { kind: "error" };

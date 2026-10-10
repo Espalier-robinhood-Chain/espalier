@@ -29,13 +29,17 @@ import {MockAggregator} from "../test/mocks/MockAggregator.sol";
 ///      - Fail-closed: konfigurasi yang kosong, tidak konsisten, atau belum ditandai terverifikasi membuat skrip
 ///        berhenti SEBELUM satu transaksi pun dikirim (forge menjalankan `run()` penuh sebagai simulasi dulu).
 ///      - Tanpa `--broadcast` skrip hanya simulasi (dry-run) dan tidak menulis file apa pun.
-///      - Mainnet (4663) selalu ditolak. Skrip ini hanya untuk testnet dan rehearsal lokal.
+///      - Mainnet (4663) DIIZINKAN hanya bila semua syarat di `_validateMainnet` terpenuhi: tanpa mock, alamat
+///        terverifikasi, timelock >= 48 jam, owner = kontrak multisig, guardian/keeper terisi, deposit
+///        cap Spur/Graft tidak nol, dan env `CONFIRM_MAINNET_DEPLOY=true` diberikan secara eksplisit.
 ///      - Kunci tidak dibaca dari env oleh skrip: `vm.startBroadcast()` tanpa argumen memakai kunci/akun yang
 ///        diberikan lewat flag forge (`--account`, `--private-key`, `--ledger`).
 ///      - Deployer menjadi ADMIN sementara untuk konfigurasi, lalu ADMIN diserahkan ke `admin.owner` (atau ke
 ///        `TimelockController` bila `admin.timelockDelaySeconds` > 0) dan deployer melepas perannya.
 contract Deploy is Script {
     uint256 internal constant MAINNET_CHAIN_ID = 4663;
+    /// Jeda timelock minimum di mainnet: 48 jam (desain produksi di README).
+    uint256 internal constant MAINNET_MIN_TIMELOCK = 172_800;
     string internal constant DEFAULT_CONFIG = "script/config/robinhood-testnet.json";
     uint256 internal constant MAX_COMPONENTS = 16;
     // Cermin batas di SpurVault, supaya kesalahan konfigurasi berhenti dengan pesan yang jelas (kontrak tetap menegakkannya).
@@ -99,6 +103,7 @@ contract Deploy is Script {
         uint256[] seedAmounts;
         uint256[] holidays;
         AssetCfg[] assets;
+        AssetCfg[] routerAssets; // hanya didaftarkan ke OracleRouter (bukan komponen cMAG7); lihat `_loadRouterAssets`
         SpurCfg spur;
         SpurCfg graft;
     }
@@ -193,6 +198,7 @@ contract Deploy is Script {
 
         c.holidays = vm.parseJsonUintArray(j, ".holidays");
         c.assets = _loadAssets(j, c.mocks);
+        c.routerAssets = _loadRouterAssets(j);
         c.spur = _loadVaultCfg(j, "spur", c.assets);
         c.graft = _loadVaultCfg(j, "graft", c.assets);
     }
@@ -255,6 +261,37 @@ contract Deploy is Script {
         }
     }
 
+    /// Bagian `routerAssets` boleh tidak ada (konfigurasi lama tetap valid). Aset di sini HANYA didaftarkan ke
+    /// `OracleRouter` (token + feed + jendela staleness), bukan menjadi komponen Cordon cMAG7. Gunanya: setelah ADMIN
+    /// diserahkan ke timelock, mendaftarkan aset baru butuh jeda 48 jam, jadi aset untuk Cordon lain (cCHIP, cVOLT)
+    /// didaftarkan sekarang, lalu `DeployCordonMainnet.s.sol` men-deploy vault-nya kapan pun tanpa menyentuh router.
+    function _loadRouterAssets(string memory j) internal view returns (AssetCfg[] memory a) {
+        if (!vm.keyExistsJson(j, ".routerAssets")) return a;
+        string[] memory symbols = abi.decode(vm.parseJson(j, ".routerAssets[*].symbol"), (string[]));
+        address[] memory tokens = abi.decode(vm.parseJson(j, ".routerAssets[*].token"), (address[]));
+        address[] memory feeds = abi.decode(vm.parseJson(j, ".routerAssets[*].feed"), (address[]));
+        uint256[] memory reg = abi.decode(vm.parseJson(j, ".routerAssets[*].stalenessRegularSeconds"), (uint256[]));
+        uint256[] memory ext = abi.decode(vm.parseJson(j, ".routerAssets[*].stalenessExtendedSeconds"), (uint256[]));
+        uint256[] memory ovn = abi.decode(vm.parseJson(j, ".routerAssets[*].stalenessOvernightSeconds"), (uint256[]));
+        bool[] memory chk = abi.decode(vm.parseJson(j, ".routerAssets[*].checkOraclePause"), (bool[]));
+
+        uint256 n = symbols.length;
+        a = new AssetCfg[](n);
+        for (uint256 i; i < n; ++i) {
+            a[i] = AssetCfg({
+                symbol: symbols[i],
+                token: tokens[i],
+                feed: feeds[i],
+                stalenessRegular: _u32(reg[i]),
+                stalenessExtended: _u32(ext[i]),
+                stalenessOvernight: _u32(ovn[i]),
+                checkOraclePause: chk[i],
+                targetBps: 0,
+                mockPriceE8: 0
+            });
+        }
+    }
+
     function _u(string memory j, string memory key, uint256 max) internal pure returns (uint256) {
         return _bound(vm.parseJsonUint(j, key), max);
     }
@@ -271,8 +308,8 @@ contract Deploy is Script {
     // -------------------------------------------------------------- validation
 
     function _validate(Config memory c) internal view {
-        require(block.chainid != MAINNET_CHAIN_ID, "skrip ini tidak untuk mainnet (4663)");
         require(block.chainid == c.chainId, "chainId RPC tidak sama dengan chainId di konfigurasi");
+        if (block.chainid == MAINNET_CHAIN_ID) _validateMainnet(c);
         require(bytes(c.name).length != 0, "config: name kosong");
         require(c.owner != address(0), "config: admin.owner kosong");
         require(bytes(c.cordonName).length != 0 && bytes(c.cordonSymbol).length != 0, "config: nama/simbol Cordon");
@@ -298,6 +335,7 @@ contract Deploy is Script {
             }
         }
         require(sum == 10_000, "config: jumlah targetBps harus 10000");
+        _validateRouterAssets(c);
 
         if (!c.mocks) {
             require(c.addressesVerified, "config: addressesVerified=false (Fase 0 item 7 belum selesai)");
@@ -331,6 +369,47 @@ contract Deploy is Script {
         if (c.spur.enabled && c.graft.enabled && !c.mocks) {
             require(c.spur.premiumToken == c.graft.premiumToken, "config: graft.premiumToken harus sama dengan spur.premiumToken");
         }
+    }
+
+    /// `routerAssets`: hanya mode nyata, kode ada di chain, jendela tidak nol, tanpa simbol/token ganda
+    /// (terhadap `assets` maupun sesama `routerAssets`).
+    function _validateRouterAssets(Config memory c) internal view {
+        uint256 m = c.routerAssets.length;
+        if (m == 0) return;
+        require(!c.mocks, "config: routerAssets hanya untuk mode nyata (mocks=false)");
+        for (uint256 i; i < m; ++i) {
+            AssetCfg memory a = c.routerAssets[i];
+            require(bytes(a.symbol).length != 0, "config: routerAssets simbol kosong");
+            require(
+                a.stalenessRegular != 0 && a.stalenessExtended != 0 && a.stalenessOvernight != 0,
+                "config: routerAssets jendela staleness 0"
+            );
+            _requireDeployed(a.token, "config: routerAssets token kosong / tanpa kode");
+            _requireDeployed(a.feed, "config: routerAssets feed kosong / tanpa kode");
+            bytes32 h = keccak256(bytes(a.symbol));
+            for (uint256 j; j < c.assets.length; ++j) {
+                require(c.assets[j].token != a.token, "config: routerAssets token sudah ada di assets");
+                require(keccak256(bytes(c.assets[j].symbol)) != h, "config: routerAssets simbol sudah ada di assets");
+            }
+            for (uint256 j; j < i; ++j) {
+                require(c.routerAssets[j].token != a.token, "config: routerAssets token ganda");
+                require(keccak256(bytes(c.routerAssets[j].symbol)) != h, "config: routerAssets simbol ganda");
+            }
+        }
+    }
+
+    /// Syarat tambahan khusus mainnet (4663). Semuanya fail-closed dan berjalan sebelum transaksi pertama.
+    function _validateMainnet(Config memory c) internal view {
+        require(!c.mocks, "mainnet: mocks=true dilarang");
+        require(c.addressesVerified, "mainnet: addressesVerified harus true (alamat sudah dicek dari sumber resmi)");
+        require(c.timelockDelay >= MAINNET_MIN_TIMELOCK, "mainnet: timelockDelaySeconds minimal 172800 (48 jam)");
+        require(c.guardian != address(0), "mainnet: admin.guardian wajib");
+        require(c.keeper != address(0), "mainnet: admin.keeper wajib");
+        // Sequencer feed: Chainlink tidak menyediakan L2 Sequencer Uptime Feed untuk Robinhood Chain (per Okt 2026).
+        // Feed kosong hanya boleh bila sequencer.allowDisabled=true (aturan umum di _validate); feed terisi harus punya kode.
+        if (c.spur.enabled) require(c.spur.depositCap != 0, "mainnet: spur.depositCap tidak boleh 0");
+        if (c.graft.enabled) require(c.graft.depositCap != 0, "mainnet: graft.depositCap tidak boleh 0");
+        require(vm.envOr("CONFIRM_MAINNET_DEPLOY", false), "mainnet: set env CONFIRM_MAINNET_DEPLOY=true untuk melanjutkan");
     }
 
     function _validateVaultCfg(Config memory c, SpurCfg memory s, string memory n) internal view {
@@ -417,6 +496,14 @@ contract Deploy is Script {
                     a.stalenessExtended,
                     a.stalenessOvernight,
                     a.checkOraclePause
+                );
+        }
+
+        for (uint256 i; i < c.routerAssets.length; ++i) {
+            AssetCfg memory x = c.routerAssets[i];
+            r.router
+                .setAssetWindows(
+                    x.token, x.feed, x.stalenessRegular, x.stalenessExtended, x.stalenessOvernight, x.checkOraclePause
                 );
         }
 
@@ -610,6 +697,7 @@ contract Deploy is Script {
 
         _verifySpur(c, r);
         _verifyGraft(c, r);
+        _verifyRouterAssets(c, r);
 
         if (r.timelock != address(0)) {
             TimelockController t = TimelockController(payable(r.timelock));
@@ -619,6 +707,20 @@ contract Deploy is Script {
             require(!t.hasRole(t.DEFAULT_ADMIN_ROLE(), r.deployer), "verify: deployer admin timelock");
             // Owner hanya proposer/executor: kalau juga admin timelock, ia bisa mengubah peran tanpa jeda.
             require(!t.hasRole(t.DEFAULT_ADMIN_ROLE(), c.owner), "verify: owner admin timelock");
+        }
+    }
+
+    /// `routerAssets` terdaftar di router dengan feed dan jendela staleness persis seperti di konfigurasi.
+    function _verifyRouterAssets(Config memory c, Result memory r) internal view {
+        for (uint256 i; i < c.routerAssets.length; ++i) {
+            AssetCfg memory x = c.routerAssets[i];
+            OracleRouter.Asset memory a = r.router.assetConfig(x.token);
+            require(address(a.feed) == x.feed, "verify: routerAssets feed");
+            require(
+                a.stalenessRegular == x.stalenessRegular && a.stalenessExtended == x.stalenessExtended
+                    && a.stalenessOvernight == x.stalenessOvernight && a.checkOraclePause == x.checkOraclePause,
+                "verify: routerAssets jendela staleness"
+            );
         }
     }
 

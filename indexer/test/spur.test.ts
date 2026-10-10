@@ -231,3 +231,33 @@ test("config: Spur opsional; bila diisi divalidasi", () => {
   assert.throws(() => loadConfig({ ...base, SPUR_VAULT_ADDRESS: "0x123", SPUR_START_BLOCK: "1" }), /SPUR_VAULT_ADDRESS/);
   assert.throws(() => loadConfig({ ...base, SPUR_VAULT_ADDRESS: V, SPUR_START_BLOCK: "1", SPUR_VAULT_SYMBOL: "bad symbol!" }), /SPUR_VAULT_SYMBOL/);
 });
+
+test("maxChunks: mengejar bertahap, pagar integritas membaca di ujung potongan, hasil akhir sama dengan tanpa batas", async () => {
+  li = 0;
+  const world = { head: 140n, events: cycle1(), rounds: { 1: round1Settled }, shares: { [A]: 10n * WAD, [B]: 30n * WAD } };
+  const full = fakeStore();
+  await syncSpurOnce(fakeChain(world).chain, full.store, CFG, boot);
+
+  const f = fakeChain(world);
+  const readAt: bigint[] = [];
+  const orig = f.chain.sharesOf;
+  f.chain.sharesOf = async (accs, block) => { readAt.push(block); return orig(accs, block); };
+  // Node arsip: keadaan round dibaca di blok yang diminta. Sebelum blok 120 (settle) round 1 sudah terjual tetapi belum settled.
+  const origRound = f.chain.round;
+  f.chain.round = async (n, block) => (block < 120n ? roundOf({ picker: P, premium: 4_000_000n }) : origRound(n, block));
+  const { store, s } = fakeStore();
+  const capped = { ...CFG, maxChunks: 2 };
+  const r1 = await syncSpurOnce(f.chain, store, capped, boot);
+  assert.equal(r1?.partial, true);
+  assert.equal(r1?.to, 119n);
+  assert.equal(s.cursor, 120n);
+  assert.deepEqual(f.st.ranges, [[100n, 109n], [110n, 119n]]);
+  assert.ok(readAt.length > 0 && readAt.every((b) => b === 119n), "share dibaca di ujung potongan (ledger hanya memuat event sampai sana)");
+  const r2 = await syncSpurOnce(f.chain, store, capped, boot);
+  assert.equal(r2?.partial, undefined);
+  assert.equal(r2?.to, 135n);
+  assert.equal(s.cursor, 136n);
+  assert.deepEqual([...s.positions], [...full.s.positions]);
+  assert.deepEqual([...s.harvests], [...full.s.harvests]);
+  assert.deepEqual([...s.rounds], [...full.s.rounds]);
+});

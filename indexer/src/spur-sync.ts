@@ -7,7 +7,7 @@
 //  * Pagar integritas: share tiap akun yang berubah dibandingkan dengan `sharesOf` di blok aman. Beda = galat, kursor tidak maju.
 //  * Urutan tulis: rounds -> positions -> harvests -> snapshot (kursor + ledger dalam SATU baris, jadi atomik).
 //    Crash di tengah = batch yang sama diproses ulang dari snapshot lama, semua tulis berupa upsert.
-import { chunkRanges, lower, toDecimal } from "./decimal.ts";
+import { capEnd, chunkRanges, lower, toDecimal } from "./decimal.ts";
 import { applyEvents, ledgerFromJson, ledgerToJson, newLedger, type Effects, type Ledger, type SpurEvent } from "./spur-ledger.ts";
 import type { PositionRow, SyncConfig } from "./sync.ts";
 
@@ -54,8 +54,8 @@ export interface SpurStore {
 }
 
 export interface SpurBoot { meta: SpurMeta; vaultId: string }
-export interface SpurSyncConfig extends Pick<SyncConfig, "confirmations" | "logChunk" | "balanceBatch"> { startBlock: bigint }
-export interface SpurSyncResult { from: bigint; to: bigint; events: number; rounds: number; harvests: number; positions: number }
+export interface SpurSyncConfig extends Pick<SyncConfig, "confirmations" | "logChunk" | "balanceBatch" | "maxChunks"> { startBlock: bigint }
+export interface SpurSyncResult { from: bigint; to: bigint; events: number; rounds: number; harvests: number; positions: number; /** true bila dibatasi maxChunks dan masih tertinggal. */ partial?: boolean }
 
 export async function bootstrapSpur(chain: SpurChain, store: SpurStore, symbolOverride: string | null): Promise<SpurBoot> {
   const meta = await chain.meta();
@@ -102,10 +102,14 @@ export async function syncSpurOnce(chain: SpurChain, store: SpurStore, cfg: Spur
   const cursor = await store.getCursor();
   const from = cursor ?? cfg.startBlock;
   if (safe < from) return null;
+  // Tertinggal jauh: paling banyak maxChunks potongan per putaran. Ledger hanya memuat event sampai `end`, jadi pagar integritas
+  // membaca kontrak di `end` (bukan `safe`); itu butuh node arsip bila `end` sudah lama (hanya terjadi saat mengejar).
+  const end = capEnd(from, safe, cfg.logChunk, cfg.maxChunks);
+  const partial = end < safe;
 
   const ledger: Ledger = cursor === null ? newLedger() : ledgerFromJson(await store.loadState());
   const events: SpurEvent[] = [];
-  for (const [a, b] of chunkRanges(from, safe, cfg.logChunk)) events.push(...(await chain.events(a, b)));
+  for (const [a, b] of chunkRanges(from, end, cfg.logChunk)) events.push(...(await chain.events(a, b)));
   events.sort((x, y) => (x.block === y.block ? x.logIndex - y.logIndex : x.block < y.block ? -1 : 1));
 
   // Waktu blok hanya dibutuhkan untuk settle dan klaim; ambil sekali per blok.
@@ -117,7 +121,7 @@ export async function syncSpurOnce(chain: SpurChain, store: SpurStore, cfg: Spur
 
   const rounds: RoundRow[] = [];
   for (const n of [...fx.touchedRounds].sort((a, b) => a - b)) {
-    const row = roundRow(await chain.round(n, safe), meta, n, fx.settledAt.get(n));
+    const row = roundRow(await chain.round(n, end), meta, n, fx.settledAt.get(n));
     if (row) rounds.push(row);
   }
 
@@ -126,12 +130,12 @@ export async function syncSpurOnce(chain: SpurChain, store: SpurStore, cfg: Spur
   const positions: PositionRow[] = [], empty: string[] = [];
   for (let i = 0; i < changed.length; i += cfg.balanceBatch) {
     const batch = changed.slice(i, i + cfg.balanceBatch);
-    const onchain = await chain.sharesOf(batch, safe);
+    const onchain = await chain.sharesOf(batch, end);
     for (const acc of batch) {
       const v = onchain.get(acc);
       if (v === undefined) throw new Error(`sharesOf ${acc} tidak dikembalikan`);
       const mine = ledger.accounts.get(acc)?.shares ?? 0n;
-      if (v !== mine) throw new Error(`share ${acc}: ledger ${mine} != kontrak ${v} di blok ${safe} (ledger tidak dipercaya, kursor tidak maju)`);
+      if (v !== mine) throw new Error(`share ${acc}: ledger ${mine} != kontrak ${v} di blok ${end} (ledger tidak dipercaya, kursor tidak maju)`);
       if (v === 0n) empty.push(acc); else positions.push({ account: acc, contract, shares: toDecimal(v, meta.shareDecimals) });
     }
   }
@@ -141,6 +145,6 @@ export async function syncSpurOnce(chain: SpurChain, store: SpurStore, cfg: Spur
   if (empty.length) await store.deletePositions(contract, empty);
   const harvests = harvestRows(fx, meta.premiumDecimals);
   if (harvests.length) await store.upsertHarvests(boot.vaultId, harvests);
-  await store.saveSnapshot(safe + 1n, ledgerToJson(ledger));
-  return { from, to: safe, events: events.length, rounds: rounds.length, harvests: harvests.length, positions: positions.length + empty.length };
+  await store.saveSnapshot(end + 1n, ledgerToJson(ledger));
+  return { from, to: end, events: events.length, rounds: rounds.length, harvests: harvests.length, positions: positions.length + empty.length, ...(partial ? { partial } : {}) };
 }

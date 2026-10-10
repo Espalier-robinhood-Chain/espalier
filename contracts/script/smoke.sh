@@ -6,13 +6,14 @@
 # Pemakaian (dari folder contracts/):
 #   RH_RPC_TESTNET=https://... ./script/smoke.sh robinhood-testnet
 #   RPC_URL=http://127.0.0.1:8545 ./script/smoke.sh robinhood-testnet-mock
+#   RH_RPC_MAINNET=https://... ./script/smoke.sh robinhood-mainnet     (hanya membaca; aman untuk mainnet)
 set -euo pipefail
 
 NAME="${1:?pemakaian: ./script/smoke.sh <name>   (membaca deployments/<name>.json)}"
 FILE="deployments/${NAME}.json"
-RPC="${RPC_URL:-${RH_RPC_TESTNET:-}}"
+RPC="${RPC_URL:-${RH_RPC_TESTNET:-${RH_RPC_MAINNET:-}}}"
 [[ -f "$FILE" ]] || { echo "tidak ada $FILE (deploy dulu dengan --broadcast)"; exit 1; }
-[[ -n "$RPC" ]] || { echo "isi RPC_URL atau RH_RPC_TESTNET"; exit 1; }
+[[ -n "$RPC" ]] || { echo "isi RPC_URL, RH_RPC_TESTNET, atau RH_RPC_MAINNET"; exit 1; }
 command -v cast >/dev/null || { echo "cast (Foundry) tidak ditemukan"; exit 1; }
 command -v jq >/dev/null || { echo "jq tidak ditemukan"; exit 1; }
 
@@ -24,7 +25,6 @@ get() { jq -r "$1" "$FILE"; }
 EXPECT_CHAIN="$(get .chainId)"
 GOT_CHAIN="$(cast chain-id --rpc-url "$RPC")"
 [[ "$GOT_CHAIN" == "$EXPECT_CHAIN" ]] && ok "chain id $GOT_CHAIN" || bad "chain id $GOT_CHAIN (diharapkan $EXPECT_CHAIN)"
-[[ "$GOT_CHAIN" != "4663" ]] || { echo "mainnet ditolak"; exit 1; }
 
 SESSION="$(get .marketSession)"; ROUTER="$(get .oracleRouter)"
 SETTLE="$(get .settlementOracle)"; VAULT="$(get .cordonVault)"; ADMIN="$(get .admin)"

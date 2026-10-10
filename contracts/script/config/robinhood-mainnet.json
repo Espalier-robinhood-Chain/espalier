@@ -1,0 +1,210 @@
+{
+  "_note": "MAINNET (4663). Alamat token, feed (proxy, BUKAN secondary SVR), dan USDG sudah dicocokkan dengan Robinhood docs, Chainlink reference-data-directory, dan SQD (Okt 2026). addressesVerified tetap false: jalankan script/verify-addresses.sh dulu (cek kode, symbol, decimals, feed, uiMultiplier) lalu ubah ke true. Staleness 90000 dtk = heartbeat feed Chainlink (86400) + 1 jam: KEPUTUSAN ANDA, lihat PANDUAN-MAINNET.md. owner/guardian/keeper/fee/cap masih placeholder. routerAssets (AMD, TSM, MU, PLTR, RKLB, IONQ) ditambahkan untuk cCHIP/cVOLT: lihat PANDUAN-cCHIP-cVOLT-MAINNET.md.",
+  "name": "robinhood-mainnet",
+  "chainId": 4663,
+  "mocks": false,
+  "addressesVerified": true,
+  "admin": {
+    "_note": "Mainnet: owner WAJIB kontrak multisig (Safe) di 4663; timelockDelaySeconds minimal 172800 (48 jam); guardian dan keeper WAJIB diisi (keeper = dompet khusus, bukan deployer/owner).",
+    "owner": "0x05eb1Deb3679047dA3c8e7F14c48A98F85d9D1e7",
+    "timelockDelaySeconds": 172800,
+    "guardian": "0x36bDdECe54BF7cb4e6bA8882D837f501A121157A",
+    "keeper": "0x59570016EA96bc1378e24683B1f8a8A24c4C4da7"
+  },
+  "sequencer": {
+    "_note": "Chainlink TIDAK menyediakan L2 Sequencer Uptime Feed untuk Robinhood Chain (daftar jaringan resmi tidak memuatnya, dan Chainlink berhenti menambah jaringan baru). Maka feed dikosongkan dan allowDisabled=true. Mitigasi: guardian yang bisa pause, staleness ketat sesuai keputusan Anda, keeper dipantau.",
+    "feed": "0x0000000000000000000000000000000000000000",
+    "gracePeriodSeconds": 3600,
+    "allowDisabled": true
+  },
+  "settlement": {
+    "_note": "maxPrintDelaySeconds adalah placeholder (usulan, pertanyaan terbuka 9). Batas kontrak 86400.",
+    "maxPrintDelaySeconds": 7200
+  },
+  "cordon": {
+    "name": "Espalier Cordon MAG7",
+    "symbol": "cMAG7"
+  },
+  "fees": {
+    "_note": "Putuskan besaran fee sebelum deploy (batas hardcode kontrak 100/100/200 bps). recipient wajib bila ada fee > 0.",
+    "mintBps": 0,
+    "redeemBps": 0,
+    "managementBps": 0,
+    "recipient": "0x0000000000000000000000000000000000000000"
+  },
+  "seed": {
+    "_note": "Seed hanya mungkin SEBELUM serah-terima ADMIN dan butuh deployer memegang token asli. Biarkan enabled=false bila tidak perlu.",
+    "enabled": false,
+    "to": "0x0000000000000000000000000000000000000000",
+    "shares": "0",
+    "amounts": []
+  },
+  "holidays": [
+    20261126,
+    20261225,
+    20270101,
+    20270118,
+    20270215,
+    20270326,
+    20270531,
+    20270618,
+    20270705,
+    20270906,
+    20271125,
+    20271224
+  ],
+  "spur": {
+    "_note": "Spur Vault (covered call mingguan). enabled=false = tidak di-deploy. Bila true di mainnet: premiumToken = USDG asli, admin.keeper wajib, depositCap WAJIB tidak nol (satuan mentah, contoh di bawah = batas kecil untuk peluncuran awal), pickers = alamat Picker/market maker sungguhan.",
+    "enabled": false,
+    "assetSymbol": "NVDA",
+    "premiumToken": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
+    "fillWindowSeconds": 21600,
+    "minDeposit": "1000000000000",
+    "depositCap": "1000000000000000000000",
+    "otmBps": 1000,
+    "minPremiumBps": 0,
+    "pickers": []
+  },
+  "assets": [
+    {
+      "symbol": "AAPL",
+      "token": "0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9",
+      "feed": "0x6B22A786bAa607d76728168703a39Ea9C99f2cD0",
+      "stalenessRegularSeconds": 90000,
+      "stalenessExtendedSeconds": 90000,
+      "stalenessOvernightSeconds": 90000,
+      "checkOraclePause": true,
+      "targetBps": 1429
+    },
+    {
+      "symbol": "MSFT",
+      "token": "0xe93237C50D904957Cf27E7B1133b510C669c2e74",
+      "feed": "0x45C3C877C15E6BA2EBB19eA114Ea508d14C1Af2E",
+      "stalenessRegularSeconds": 90000,
+      "stalenessExtendedSeconds": 90000,
+      "stalenessOvernightSeconds": 90000,
+      "checkOraclePause": true,
+      "targetBps": 1429
+    },
+    {
+      "symbol": "GOOGL",
+      "token": "0x2e0847E8910a9732eB3fb1bb4b70a580ADAD4FE3",
+      "feed": "0xF6f373a037c30F0e5010d854385cA89185AE638b",
+      "stalenessRegularSeconds": 90000,
+      "stalenessExtendedSeconds": 90000,
+      "stalenessOvernightSeconds": 90000,
+      "checkOraclePause": true,
+      "targetBps": 1429
+    },
+    {
+      "symbol": "AMZN",
+      "token": "0x12f190a9F9d7D37a250758b26824B97CE941bF54",
+      "feed": "0xD5a1508ceD74c084eBf3cBe853e2C968fB2a651C",
+      "stalenessRegularSeconds": 90000,
+      "stalenessExtendedSeconds": 90000,
+      "stalenessOvernightSeconds": 90000,
+      "checkOraclePause": true,
+      "targetBps": 1429
+    },
+    {
+      "symbol": "NVDA",
+      "token": "0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC",
+      "feed": "0x379EC4f7C378F34a1B47E4F3cbeBCbAC3E8E9F15",
+      "stalenessRegularSeconds": 90000,
+      "stalenessExtendedSeconds": 90000,
+      "stalenessOvernightSeconds": 90000,
+      "checkOraclePause": true,
+      "targetBps": 1429
+    },
+    {
+      "symbol": "META",
+      "token": "0xc0D6457C16Cc70d6790Dd43521C899C87ce02f35",
+      "feed": "0x7C38C00C30BEe9378381E7B6135d7283356D71b1",
+      "stalenessRegularSeconds": 90000,
+      "stalenessExtendedSeconds": 90000,
+      "stalenessOvernightSeconds": 90000,
+      "checkOraclePause": true,
+      "targetBps": 1429
+    },
+    {
+      "symbol": "TSLA",
+      "token": "0x322F0929c4625eD5bAd873c95208D54E1c003b2d",
+      "feed": "0x4A1166a659A55625345e9515b32adECea5547C38",
+      "stalenessRegularSeconds": 90000,
+      "stalenessExtendedSeconds": 90000,
+      "stalenessOvernightSeconds": 90000,
+      "checkOraclePause": true,
+      "targetBps": 1426
+    }
+  ],
+  "_routerAssets_note": "Aset yang HANYA didaftarkan ke OracleRouter pada deploy ini (bukan komponen cMAG7), untuk Cordon cCHIP (AMD, TSM, MU) dan cVOLT (PLTR, RKLB, IONQ). NVDA dan TSLA sudah ada di assets di atas. Alasan: setelah ADMIN diserahkan, mendaftarkan aset baru harus lewat timelock 48 jam. Sumber alamat: Robinhood API /rhj/assets dan Chainlink reference-data-directory (diambil 10 Okt 2026), dipindahkan dari spreadsheet Anda; checksum EIP-55 sudah dicek. WAJIB tetap dijalankan lewat script/verify-addresses.sh sebelum addressesVerified=true.",
+  "routerAssets": [
+    {
+      "symbol": "AMD",
+      "token": "0x86923f96303D656E4aa86D9d42D1e57ad2023fdC",
+      "feed": "0x943A29E7ae51A4798823ca9eEd2ed533B2A22C72",
+      "stalenessRegularSeconds": 90000,
+      "stalenessExtendedSeconds": 90000,
+      "stalenessOvernightSeconds": 90000,
+      "checkOraclePause": true
+    },
+    {
+      "symbol": "TSM",
+      "token": "0x58FfE4a942d3885bAa22D7520691F611EF09e7AA",
+      "feed": "0x874cF94aa8eC88Fd9560094dD065f2fB3E41Fc2F",
+      "stalenessRegularSeconds": 90000,
+      "stalenessExtendedSeconds": 90000,
+      "stalenessOvernightSeconds": 90000,
+      "checkOraclePause": true
+    },
+    {
+      "symbol": "MU",
+      "token": "0xfF080c8ce2E5feadaCa0Da81314Ae59D232d4afD",
+      "feed": "0x425EEFdCf05ed6526C3cE61Af99429A228a6d596",
+      "stalenessRegularSeconds": 90000,
+      "stalenessExtendedSeconds": 90000,
+      "stalenessOvernightSeconds": 90000,
+      "checkOraclePause": true
+    },
+    {
+      "symbol": "PLTR",
+      "token": "0x894E1EC2D74FFE5AEF8Dc8A9e84686acCB964F2A",
+      "feed": "0x820ABedFF239034956B7A9d2F0a331f9F075eB4c",
+      "stalenessRegularSeconds": 90000,
+      "stalenessExtendedSeconds": 90000,
+      "stalenessOvernightSeconds": 90000,
+      "checkOraclePause": true
+    },
+    {
+      "symbol": "RKLB",
+      "token": "0x3b14C39E89D60D627b42a1A4CA45b5bb45Fc12e2",
+      "feed": "0x045477BF65Aef6f4F2386ad0164579e48381CC74",
+      "stalenessRegularSeconds": 90000,
+      "stalenessExtendedSeconds": 90000,
+      "stalenessOvernightSeconds": 90000,
+      "checkOraclePause": true
+    },
+    {
+      "symbol": "IONQ",
+      "token": "0x558378E000D634A36593E338eBacdd6207640EfE",
+      "feed": "0x22EfeC4919baf55F360E0EDee4AbEB26DE4971eb",
+      "stalenessRegularSeconds": 90000,
+      "stalenessExtendedSeconds": 90000,
+      "stalenessOvernightSeconds": 90000,
+      "checkOraclePause": true
+    }
+  ],
+  "_holidays_note": "2027 dibuat dari aturan NYSE (observed rules); WAJIB dicocokkan dengan kalender resmi NYSE sebelum deploy. Libur tahun 2028 dan seterusnya belum diisi.",
+  "graft": {
+    "_note": "Graft Vault (cash-secured put). enabled=false = tidak di-deploy. Aturan sama dengan spur; premiumToken harus sama dengan spur.premiumToken (USDG).",
+    "enabled": false,
+    "assetSymbol": "NVDA",
+    "premiumToken": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
+    "fillWindowSeconds": 21600,
+    "minDeposit": "1000000",
+    "depositCap": "1000000000",
+    "otmBps": 1000,
+    "minPremiumBps": 0,
+    "pickers": []
+  }
+}

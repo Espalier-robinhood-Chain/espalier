@@ -13,6 +13,16 @@ export function toDecimal(value: bigint, decimals: number): string {
 export const ZERO = "0x0000000000000000000000000000000000000000";
 export const lower = (a: string) => a.toLowerCase();
 
+/**
+ * Ujung rentang satu putaran. `maxChunks` > 0 membatasi putaran ke `maxChunks` potongan supaya putaran cron (maks ~60 dtk)
+ * selalu selesai dan kursor maju walau indexer tertinggal jauh (RPC dengan batas getLogs kecil). undefined/0 = sampai `safe`.
+ */
+export function capEnd(from: bigint, safe: bigint, size: bigint, maxChunks?: number): bigint {
+  if (!maxChunks || maxChunks <= 0) return safe;
+  const end = from + size * BigInt(maxChunks) - 1n;
+  return end < safe ? end : safe;
+}
+
 /** Pecah [from, to] (inklusif) jadi potongan berukuran paling besar `size`. */
 export function chunkRanges(from: bigint, to: bigint, size: bigint): Array<[bigint, bigint]> {
   if (size <= 0n) throw new RangeError("size harus > 0");

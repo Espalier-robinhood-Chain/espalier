@@ -1,0 +1,53 @@
+{
+  "_note": "Cordon cCHIP (semikonduktor): NVDA, AMD, TSM, MU. MU menggantikan AVGO (AVGO tidak punya token/feed Robinhood). Bobot 25% x 4 = ASUMSI (di situs tertulis 'To be set'). MAINNET (4663), memakai OracleRouter hasil deploy robinhood-mainnet. router, owner (= TimelockController), dan keeper DIISI OTOMATIS oleh deploy-cordon-mainnet.sh dari deployments/robinhood-mainnet.json dan config utama; jangan diisi manual. Aset sudah terdaftar di router lewat routerAssets/assets deploy utama.",
+  "name": "cchip-mainnet",
+  "chainId": 4663,
+  "addressesVerified": false,
+  "router": "0x0000000000000000000000000000000000000000",
+  "owner": "0x0000000000000000000000000000000000000000",
+  "keeper": "0x0000000000000000000000000000000000000000",
+  "cordon": {
+    "name": "Espalier Cordon Semiconductors",
+    "symbol": "cCHIP"
+  },
+  "fees": {
+    "_note": "DIISI OTOMATIS: deploy-cordon-mainnet.sh menyalin fees dari script/config/robinhood-mainnet.json (sama dengan cMAG7), jadi nilai di bawah ini diabaikan oleh skrip. Ubah fee di robinhood-mainnet.json bila perlu (batas hardcode kontrak 100/100/200 bps).",
+    "mintBps": 0,
+    "redeemBps": 0,
+    "managementBps": 0,
+    "recipient": "0x0000000000000000000000000000000000000000"
+  },
+  "seed": {
+    "_note": "Seed memakai token ASLI yang dipegang deployer (bukan mock), dan hanya bisa SEBELUM serah-terima. Biarkan enabled=false bila tidak perlu.",
+    "enabled": false,
+    "to": "0x0000000000000000000000000000000000000000",
+    "shares": "0",
+    "amounts": []
+  },
+  "assets": [
+    {
+      "symbol": "NVDA",
+      "token": "0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC",
+      "feed": "0x379EC4f7C378F34a1B47E4F3cbeBCbAC3E8E9F15",
+      "targetBps": 2500
+    },
+    {
+      "symbol": "AMD",
+      "token": "0x86923f96303D656E4aa86D9d42D1e57ad2023fdC",
+      "feed": "0x943A29E7ae51A4798823ca9eEd2ed533B2A22C72",
+      "targetBps": 2500
+    },
+    {
+      "symbol": "TSM",
+      "token": "0x58FfE4a942d3885bAa22D7520691F611EF09e7AA",
+      "feed": "0x874cF94aa8eC88Fd9560094dD065f2fB3E41Fc2F",
+      "targetBps": 2500
+    },
+    {
+      "symbol": "MU",
+      "token": "0xfF080c8ce2E5feadaCa0Da81314Ae59D232d4afD",
+      "feed": "0x425EEFdCf05ed6526C3cE61Af99429A228a6d596",
+      "targetBps": 2500
+    }
+  ]
+}
